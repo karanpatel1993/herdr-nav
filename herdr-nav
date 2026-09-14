@@ -1,0 +1,592 @@
+#!/usr/bin/env bash
+# herdr-nav - file navigation, search and jdb debugging for herdr.
+#
+#   herdr-nav file | class | grep [query] | recent | tree
+#   herdr-nav breakpoint | lines <file> | bp <file>[:line]
+#   herdr-nav debug [port] | debug-all
+#   herdr-nav doctor | keys | version
+#
+# Install: put this on PATH, then `herdr-nav keys` and paste what it prints
+# into ~/.config/herdr/config.toml.
+#
+# The herdr server spawns bindings through `/bin/sh -c` with a PATH that has
+# neither ~/.local/bin nor any version-manager bin on it, so bindings must use
+# an absolute path to this script. `herdr config check` cannot catch that: a
+# bare command name validates fine, then fails silently at keypress time.
+set -uo pipefail
+VERSION=0.1.0
+
+# ---------------------------------------------------------------- config ----
+CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
+CONF=$CONF_DIR/config
+STATE=${XDG_STATE_HOME:-$HOME/.local/state}/herdr-nav
+RECENT=$STATE/recent
+mkdir -p "$CONF_DIR" "$STATE"
+# shellcheck disable=SC1090
+[ -r "$CONF" ] && . "$CONF"
+
+PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}
+export PATH
+
+# Resolve a tool by any of its known binary names. Debian renames two of these.
+resolve() { local n; for n in "$@"; do command -v "$n" 2>/dev/null && return 0; done; return 1; }
+
+FZF=${HERDR_NAV_FZF:-$(resolve fzf)}
+RG=${HERDR_NAV_RG:-$(resolve rg ripgrep)}
+FD=${HERDR_NAV_FD:-$(resolve fd fdfind)}
+BAT=${HERDR_NAV_BAT:-$(resolve bat batcat)}
+LF=${HERDR_NAV_LF:-$(resolve lf)}
+JDB=${HERDR_NAV_JDB:-$(resolve jdb)}
+JQ=$(resolve jq)
+HERDR=${HERDR_BIN_PATH:-$(resolve herdr)}
+PAGER_BIN=$(resolve less more)
+
+# Where "open" sends a selection: pane | idea | print
+OPEN_ACTION=${HERDR_NAV_OPEN:-pane}
+IDEA_PORT=${HERDR_NAV_IDEA_PORT:-63342}
+# "port:Name" pairs for the debug picker, e.g. "5019:NB 5027:LP". Empty = ports only.
+DEBUG_PORTS=${HERDR_NAV_DEBUG_PORTS:-}
+
+SELF=$(command -v "$0" 2>/dev/null || printf '%s' "$0")
+case $SELF in /*) ;; *) SELF=$PWD/$SELF ;; esac
+
+# Ripgrep answers a real query in ~0.1s, so there is nothing to index. What hurts
+# is the first keystroke: a 1-char query can match millions of lines and fzf has
+# to ingest all of them. Guard the query length and cap the result count instead.
+# Navigation recurses: a result opens the line browser, which can open another
+# result list, and so on. Esc unwinds one level, which is the back-stack.
+DEPTH=${HERDR_NAV_DEPTH:-0}
+MAX_DEPTH=${HERDR_NAV_MAX_DEPTH:-25}
+descend() { HERDR_NAV_DEPTH=$((DEPTH + 1)) "$@"; }
+
+MIN_QUERY=${HERDR_NAV_MIN_QUERY:-3}
+MAX_HITS=${HERDR_NAV_MAX_HITS:-20000}
+
+die()   { printf 'herdr-nav: %s\n' "$*" >&2; exit 1; }
+pause() { printf '\n%s\nPress Enter to close... ' "$*"; read -r _; }
+
+need() {
+    local missing=() t
+    for t in "$@"; do
+        case $t in
+            fzf) [ -n "$FZF" ] || missing+=(fzf) ;;
+            fd)  [ -n "$FD" ]  || missing+=("fd (or fdfind)") ;;
+            bat) [ -n "$BAT" ] || missing+=("bat (or batcat)") ;;
+            rg)  [ -n "$RG" ]  || missing+=(ripgrep) ;;
+            jdb) [ -n "$JDB" ] || missing+=("jdb (a JDK)") ;;
+            jq)  [ -n "$JQ" ]  || missing+=(jq) ;;
+        esac
+    done
+    [ ${#missing[@]} -eq 0 ] && return 0
+    pause "herdr-nav needs: ${missing[*]}
+Run 'herdr-nav doctor' for details."
+    exit 1
+}
+
+# ------------------------------------------------------------ pane scope ----
+PANE_CWD=${HERDR_ACTIVE_PANE_CWD:-${PWD}}
+TARGET=${HERDR_ACTIVE_PANE_ID:-${HERDR_PANE_ID:-}}
+ROOT=$(git -C "$PANE_CWD" rev-parse --show-toplevel 2>/dev/null) || ROOT=$PANE_CWD
+
+svc_name() {
+    local p=$1 pair
+    for pair in $DEBUG_PORTS; do
+        [ "${pair%%:*}" = "$p" ] && { printf '%s' "${pair#*:}"; return; }
+    done
+    printf '?'
+}
+known_port() {
+    local p=$1 pair
+    [ -z "$DEBUG_PORTS" ] && return 0          # no map configured: accept any
+    for pair in $DEBUG_PORTS; do [ "${pair%%:*}" = "$p" ] && return 0; done
+    return 1
+}
+
+abs() { case $1 in /*) printf '%s' "$1" ;; *) printf '%s/%s' "$ROOT" "$1" ;; esac; }
+# Path -> fully-qualified class name. The leading path segment is optional so a
+# repo-relative "src/com/acme/X.java" works as well as an absolute one.
+fqcn() {
+    printf '%s' "$1" | sed -E '
+        s#^(.*/)?src/(main/(java|kotlin)/)?##
+        s#^(.*/)?tests?/(java/)?##
+        s#\.(java|kt)$##
+        s#/#.#g'
+}
+
+open_in_pane() {
+    local full=$(abs "$1") ref
+    printf '%s\n' "$full" >> "$RECENT"
+    ref=$full; [ "$PANE_CWD" = "$ROOT" ] && ref=${full#"$ROOT"/}
+    [ -n "${2:-}" ] && ref="$ref:$2"
+    [ -n "$TARGET" ] && [ -n "$HERDR" ] && \
+        "$HERDR" pane send-text "$TARGET" "$ref " >/dev/null 2>&1 && return
+    pause "$ref"
+}
+open_in_idea() {
+    local full=$(abs "$1")
+    printf '%s\n' "$full" >> "$RECENT"
+    curl -sfG "http://127.0.0.1:$IDEA_PORT/api/file" \
+        --data-urlencode "file=$full" --data-urlencode "line=${2:-1}" -o /dev/null 2>/dev/null \
+    || pause "IntelliJ did not accept the request on port $IDEA_PORT.
+A remote-development backend ('idea serverMode') does not serve this endpoint.
+Set HERDR_NAV_OPEN=pane in $CONF if you do not use it."
+}
+view_here() { "$BAT" --style=numbers,header --paging=always --pager="${PAGER_BIN:-less} -R +${2:-1}" "$(abs "$1")"; }
+send_breakpoint() {
+    local cmd
+    if [ -n "${2:-}" ]; then cmd="stop at $(fqcn "$1"):$2"; else cmd="stop in $(fqcn "$1")."; fi
+    [ -n "$TARGET" ] && [ -n "$HERDR" ] && \
+        "$HERDR" pane send-text "$TARGET" "$cmd" >/dev/null 2>&1 && return
+    pause "$cmd"
+}
+send_breakpoints() {
+    [ -n "$TARGET" ] && [ -n "$HERDR" ] && \
+        "$HERDR" pane send-text "$TARGET" "$1" >/dev/null 2>&1 && return
+    pause "$2 breakpoint(s):
+$1"
+}
+default_open() { case $OPEN_ACTION in idea) open_in_idea "$@" ;; print) pause "$(abs "$1")${2:+:$2}" ;; *) open_in_pane "$@" ;; esac; }
+dispatch() {
+    case $1 in
+        ctrl-o) open_in_idea  "$2" "${3:-}" ;;
+        alt-b|ctrl-t) send_breakpoint "$2" "${3:-}" ;;
+        ctrl-v) view_here     "$2" "${3:-}" ;;
+        *)      default_open  "$2" "${3:-}" ;;
+    esac
+}
+
+# -------------------------------------------------------------- pickers ----
+HDR='Enter: open   ^T: breakpoint   ^V: view   Alt+W: resize   Esc: close'
+PREVIEW_CYCLE='alt-w:change-preview-window(right,75%|right,85%|down,60%|right,40%|right,60%)'
+
+pick() {
+    local prompt=$1 preview=$2; shift 2
+    "$FZF" --prompt="$prompt" --header="$HDR" --expect=ctrl-o,ctrl-v,alt-b,ctrl-t \
+           --preview "$preview" --info=inline --cycle --layout=reverse \
+           --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview' "$@"
+}
+fd_args() { printf '%s' "--type f --hidden --follow --exclude .git --strip-cwd-prefix"; }
+preview_file() { printf '%s --color=always --style=numbers --line-range :300 {}' "$BAT"; }
+
+guard_root() {
+    case $ROOT in
+        "$HOME"|/) pause "No git repo above:
+  $PANE_CWD
+Searching $ROOT would walk everything. cd into a repo first."; exit 1 ;;
+    esac
+    cd "$ROOT" || die "cannot cd to $ROOT"
+}
+
+cmd_file() {
+    local out
+    out=$("$FD" $(fd_args) . | pick "$(basename "$ROOT") file> " "$(preview_file)" \
+          --scheme=path --preview-window=right,60%,border-left) || exit 0
+    [ -n "$out" ] || exit 0
+    dispatch "${out%%$'\n'*}" "${out#*$'\n'}" ""
+}
+cmd_class() {
+    local out
+    out=$("$FD" $(fd_args) -e java -e kt -e ts -e tsx -e vue -e scss -e py -e go -e rs . \
+        | pick "class> " "$(preview_file)" --delimiter=/ --nth=-1 --scheme=path \
+               --preview-window=right,60%,border-left) || exit 0
+    [ -n "$out" ] || exit 0
+    dispatch "${out%%$'\n'*}" "${out#*$'\n'}" ""
+}
+cmd_grep() {
+    local out sel path rest
+    out=$(pick "$(basename "$ROOT") rg (${MIN_QUERY}+ chars)> " "$BAT --color=always --style=numbers --highlight-line {2} {1}" \
+            --ansi --disabled --query "${1:-}" --delimiter : \
+            --bind "start:reload($SELF search {q})" \
+            --bind "change:reload(sleep 0.05; $SELF search {q})" \
+            --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' < /dev/null) || exit 0
+    [ -n "$out" ] || exit 0
+    sel=${out#*$'\n'}; [ -n "$sel" ] || exit 0
+    path=${sel%%:*}; rest=${sel#*:}
+    dispatch "${out%%$'\n'*}" "$path" "${rest%%:*}"
+}
+cmd_search() {
+    local q=${1:-}
+    [ ${#q} -ge "$MIN_QUERY" ] || exit 0
+    "$RG" --column --line-number --no-heading --color=always --smart-case \
+          --hidden --follow --glob '!.git' --max-columns 400 --max-columns-preview \
+          -- "$q" 2>/dev/null | head -n "$MAX_HITS"
+}
+
+# Word-boundary search for an identifier. Not semantic: it cannot tell your
+# `status` from an unrelated class's `status`. Exact for a LOCAL variable scoped
+# to one file (pass that file as $2); an 80% answer for a field or method name.
+cmd_usages() {
+    local name=${1:-} scope=${2:-} out sel path rest hits
+    if [ -z "$name" ]; then
+        printf 'Find usages of: '; read -r name
+        name=$(printf '%s' "$name" | tr -d '[:space:]')
+    fi
+    [ -n "$name" ] || exit 0
+    local -a rgargs=(--column --line-number --no-heading --color=always --word-regexp
+                     --hidden --follow --glob '!.git' --max-columns 400 --)
+    hits=$("$RG" "${rgargs[@]}" "$name" ${scope:+"$scope"} 2>/dev/null | head -n "$MAX_HITS")
+    [ -n "$hits" ] || { pause "No usages of '$name'${scope:+ in $(basename "$scope")}."; exit 0; }
+    while true; do
+    out=$(printf '%s\n' "$hits" \
+        | "$FZF" --ansi --delimiter : --layout=reverse --info=inline \
+                 --prompt="usages of $name> " \
+                 --header="$(printf '%s' "$hits" | grep -c .) hits${scope:+ in $(basename "$scope")}   Enter: go there   ^P: path to pane   ^T: breakpoint   ^V: view" \
+                 --expect=ctrl-v,alt-b,ctrl-t,ctrl-p \
+                 --preview "$BAT --color=always --style=numbers --highlight-line {2} {1}" \
+                 --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
+                 --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview') || return 0
+    [ -n "$out" ] || return 0
+    sel=${out#*$'\n'}; [ -n "$sel" ] || return 0
+    path=${sel%%:*}; rest=${sel#*:}
+    case ${out%%$'\n'*} in
+        ctrl-v) view_here "$path" "${rest%%:*}" ;;
+        alt-b|ctrl-t) send_breakpoint "$path" "${rest%%:*}" ;;
+        ctrl-p) open_in_pane "$path" "${rest%%:*}" ;;
+        # Enter keeps navigating: land in the file at that line, where ^R and
+        # ^] can jump again. Esc there returns here -- that is the back-stack.
+        *)      if [ "$DEPTH" -lt "$MAX_DEPTH" ]; then
+                    descend cmd_lines "$path" "${rest%%:*}"
+                else
+                    pause "Navigation depth limit ($MAX_DEPTH) reached."
+                fi ;;
+    esac
+    done
+}
+
+# A Java declaration puts a modifier or a return type immediately before the
+# name; a call site does not. Good enough to split "who calls this" from "where
+# is it defined" without a compiler.
+decl_re() {
+    printf '(public|private|protected|static|final|abstract|synchronized|default|native)\\s[^=;]*\\b%s\\s*\\(' "$1"
+    printf '|\\b(void|int|long|boolean|double|float|char|byte|short|[A-Z][A-Za-z0-9_<>\\[\\],\\s]*)\\s+%s\\s*\\(' "$1"
+}
+
+# Call sites only: the name followed by "(", minus anything that looks declared.
+cmd_callers() {
+    local name=${1:-} scope=${2:-} hits decl out sel path rest
+    if [ -z "$name" ]; then
+        printf 'Callers of: '; read -r name
+        name=$(printf '%s' "$name" | tr -d '[:space:]')
+    fi
+    [ -n "$name" ] || exit 0
+    decl=$(decl_re "$name")
+    # Callers are a code question, so exclude docs and other prose -- a method
+    # name quoted in a markdown file is not a call site.
+    hits=$("$RG" --column --line-number --no-heading --color=always --hidden --follow \
+                 --glob '!.git' --glob '!*.md' --glob '!*.txt' --glob '!*.json' \
+                 --max-columns 400 -e "[^A-Za-z0-9_]${name}\\s*\\(" ${scope:+"$scope"} 2>/dev/null \
+           | "$RG" -v -e "$decl" 2>/dev/null | head -n "$MAX_HITS")
+    if [ -z "$hits" ]; then
+        pause "No callers of '$name'.
+It may be unused, called only via reflection or an interface, or the name is
+spelled differently at the call site."
+        exit 0
+    fi
+    while true; do
+    out=$(printf '%s\n' "$hits" \
+        | "$FZF" --ansi --delimiter : --layout=reverse --info=inline \
+                 --prompt="callers of $name> " \
+                 --header="$(printf '%s' "$hits" | grep -c .) call site(s)   Enter: go there   ^P: path to pane   ^T: breakpoint   ^V: view" \
+                 --expect=ctrl-v,alt-b,ctrl-t,ctrl-p \
+                 --preview "$BAT --color=always --style=numbers --highlight-line {2} {1}" \
+                 --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
+                 --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview') || return 0
+    [ -n "$out" ] || return 0
+    sel=${out#*$'\n'}; [ -n "$sel" ] || return 0
+    path=${sel%%:*}; rest=${sel#*:}
+    case ${out%%$'\n'*} in
+        ctrl-v) view_here "$path" "${rest%%:*}" ;;
+        alt-b|ctrl-t) send_breakpoint "$path" "${rest%%:*}" ;;
+        ctrl-p) open_in_pane "$path" "${rest%%:*}" ;;
+        # Enter keeps navigating: land in the file at that line, where ^R and
+        # ^] can jump again. Esc there returns here -- that is the back-stack.
+        *)      if [ "$DEPTH" -lt "$MAX_DEPTH" ]; then
+                    descend cmd_lines "$path" "${rest%%:*}"
+                else
+                    pause "Navigation depth limit ($MAX_DEPTH) reached."
+                fi ;;
+    esac
+    done
+}
+
+# Go to definition. For a method this finds the declaration and every override
+# (an override is itself a declaration), which covers both IntelliJ's Go to
+# Declaration and Go to Implementation. For a Type it finds the class/interface/
+# enum/record that declares it.
+cmd_def() {
+    local name=${1:-} hits out sel path rest pat
+    if [ -z "$name" ]; then
+        printf 'Go to definition of: '; read -r name
+        name=$(printf '%s' "$name" | tr -d '[:space:]')
+    fi
+    [ -n "$name" ] || exit 0
+    pat="\\b(class|interface|enum|record|@interface)\\s+${name}\\b|$(decl_re "$name")"
+    pat="$pat|\\b(private|public|protected|static|final)[A-Za-z0-9_<>\\[\\], ]*\\s${name}\\s*(=|;)"
+    hits=$("$RG" --column --line-number --no-heading --color=always --hidden --follow \
+                 --glob '!.git' --glob '!*.md' --glob '!*.txt' --max-columns 400 \
+                 -e "$pat" 2>/dev/null | head -n "$MAX_HITS")
+    if [ -z "$hits" ]; then
+        pause "No definition found for '$name'.
+It may be inherited, generated (Lombok), declared in a dependency jar, or
+spelled differently. Try prefix+shift+U for every textual occurrence."
+        exit 0
+    fi
+    while true; do
+    out=$(printf '%s\n' "$hits" \
+        | "$FZF" --ansi --delimiter : --layout=reverse --info=inline \
+                 --prompt="definition of $name> " \
+                 --header="$(printf '%s' "$hits" | grep -c .) declaration(s)/override(s)   Enter: go there   ^P: path to pane   ^T: breakpoint   ^V: view" \
+                 --expect=ctrl-v,alt-b,ctrl-t,ctrl-p \
+                 --preview "$BAT --color=always --style=numbers --highlight-line {2} {1}" \
+                 --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
+                 --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview') || return 0
+    [ -n "$out" ] || return 0
+    sel=${out#*$'\n'}; [ -n "$sel" ] || return 0
+    path=${sel%%:*}; rest=${sel#*:}
+    case ${out%%$'\n'*} in
+        ctrl-v) view_here "$path" "${rest%%:*}" ;;
+        alt-b|ctrl-t) send_breakpoint "$path" "${rest%%:*}" ;;
+        ctrl-p) open_in_pane "$path" "${rest%%:*}" ;;
+        # Enter keeps navigating: land in the file at that line, where ^R and
+        # ^] can jump again. Esc there returns here -- that is the back-stack.
+        *)      if [ "$DEPTH" -lt "$MAX_DEPTH" ]; then
+                    descend cmd_lines "$path" "${rest%%:*}"
+                else
+                    pause "Navigation depth limit ($MAX_DEPTH) reached."
+                fi ;;
+    esac
+    done
+}
+
+# Identifiers on one line, so you can pick the one you mean rather than typing it.
+idents_on_line() {
+    sed -n "${2}p" "$1" \
+        | grep -oE '[A-Za-z_][A-Za-z0-9_]*' \
+        | grep -vxE 'if|else|for|while|return|new|this|public|private|protected|static|final|void|int|long|boolean|String|class|import|package|try|catch|throw|throws|null|true|false' \
+        | awk '!seen[$0]++'
+}
+
+cmd_recent() {
+    local out
+    [ -s "$RECENT" ] || { pause "Nothing opened through herdr-nav yet."; exit 0; }
+    out=$(tac "$RECENT" | awk '!seen[$0]++' | pick "recent> " "$(preview_file)" \
+          --scheme=path --preview-window=right,60%,border-left) || exit 0
+    [ -n "$out" ] || exit 0
+    dispatch "${out%%$'\n'*}" "${out#*$'\n'}" ""
+}
+cmd_tree() { [ -n "$LF" ] || { pause "lf is not installed (https://github.com/gokcehan/lf)"; exit 1; }; "$LF" "$ROOT"; }
+
+cmd_lines() {
+    local file=$1 start=${2:-1} out sel line cls payload count
+    [ -f "$file" ] || { pause "no such file: $file"; return 1; }
+    # Loop rather than exit: after a jump you land back here, ready to jump again.
+    while true; do
+    out=$(awk '{ printf "%6d  %s\n", NR, $0 }' "$file" \
+        | "$FZF" --prompt="$(basename "$file") line> " --layout=reverse --no-sort --multi \
+                 --header="$(basename \"$file\")   Tab: mark   Enter: breakpoint   ^R: callers/usages   ^]: definition   ^P: path   Esc: back" \
+                 --expect=ctrl-v,ctrl-p,alt-u,ctrl-r,ctrl-] --delimiter='  +' --nth=2.. \
+                 --preview "$BAT --color=always --style=numbers --highlight-line {1} '$file'" \
+                 --preview-window "right,60%,border-left,+{1}+3/3,~0" \
+                 --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview') || return 0
+    [ -n "$out" ] || return 0
+    sel=${out#*$'\n'}; [ -n "$sel" ] || return 0
+    line=$(printf '%s' "$sel" | head -1 | awk '{print $1}')
+    start=$line
+    case ${out%%$'\n'*} in
+        ctrl-v) view_here "$file" "$line" ;;
+        ctrl-p) open_in_pane "$file" "$line" ;;
+        ctrl-])  local did
+                did=$(idents_on_line "$file" "$line" \
+                      | "$FZF" --layout=reverse --prompt="definition of> " \
+                               --header="identifiers on line $line") || continue
+                [ -n "$did" ] && descend cmd_def "$did" ;;
+        alt-u|ctrl-r) local id
+                id=$(idents_on_line "$file" "$line" \
+                     | "$FZF" --layout=reverse --prompt="callers / usages of> " \
+                              --header="identifiers on line $line") || continue
+                [ -n "$id" ] || continue
+                # "name(" on this line means it is a method -- show who calls it
+                if sed -n "${line}p" "$file" | grep -qE "\\b${id}[[:space:]]*\\("; then
+                    descend cmd_callers "$id"
+                else
+                    descend cmd_usages "$id"
+                fi ;;
+        *)  cls=$(fqcn "$file")
+            payload=$(printf '%s' "$sel" | awk -v c="$cls" 'NF { printf "%sstop at %s:%s", sep, c, $1; sep="\n" }')
+            count=$(printf '%s' "$sel" | grep -c .)
+            send_breakpoints "$payload" "$count"
+            return 0 ;;
+    esac
+    done
+}
+cmd_breakpoint() {
+    local file
+    file=$("$FD" $(fd_args) -e java -e kt . | pick "breakpoint in> " "$(preview_file)" \
+           --delimiter=/ --nth=-1 --scheme=path --preview-window=right,60%,border-left) || exit 0
+    file=${file#*$'\n'}; [ -n "$file" ] || exit 0
+    cmd_lines "$file"
+}
+
+# ---------------------------------------------------------------- debug ----
+live_ports() {
+    ss -ltn 2>/dev/null | awk '{print $4}' | grep -oE ':[0-9]+$' | tr -d ':' | sort -un \
+    | while read -r p; do known_port "$p" && [ "$p" -ge 1024 ] && printf '%s\n' "$p"; done
+}
+jvm_tree() {                       # which checkout the JVM on $1 was started from
+    local pid src
+    pid=$(ss -ltnp 2>/dev/null | grep ":$1 " | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+    [ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ] || { printf '?'; return; }
+    src=$(tr '\0' ' ' < "/proc/$pid/cmdline" | grep -oE "$HOME/[^ ]*/" | head -1)
+    src=${src%/}; src=${src##*/}
+    printf '%s' "${src:-?}"
+}
+sourcepath() { "$FD" --type d --max-depth 4 '^(src|java)$' "$ROOT" 2>/dev/null | tr '\n' ':' | sed 's/:$//'; }
+
+cmd_debug() {
+    need jdb
+    local port=$1 line sp
+    if [ -z "$port" ]; then
+        need fzf
+        line=$(live_ports | while read -r p; do
+                   local t=$(jvm_tree "$p") mark=""
+                   [ "$t" != "?" ] && [ "$t" != "$(basename "$ROOT")" ] && mark="  <-- NOT this pane's tree"
+                   printf '%s\t%s\t%s%s\n' "$p" "$(svc_name "$p")" "$t" "$mark"
+               done | "$FZF" --delimiter='\t' --with-nth=1,2,3 --layout=reverse \
+                             --prompt="attach jdb> " --header="live JDWP ports") || exit 0
+        port=${line%%$'\t'*}
+    fi
+    [ -n "$port" ] || exit 0
+    sp=$(sourcepath)
+    [ -n "${HERDR_PANE_ID:-}" ] && [ -n "$HERDR" ] && \
+        "$HERDR" pane rename "$HERDR_PANE_ID" "jdb $(svc_name "$port") :$port" >/dev/null 2>&1
+    printf 'jdb -> 127.0.0.1:%s   %s   (%s source dirs)\n\n' \
+        "$port" "$(svc_name "$port")" "$(printf '%s' "$sp" | tr ':' '\n' | grep -c .)"
+    exec "$JDB" -sourcepath "$sp" -attach "127.0.0.1:$port"
+}
+
+cmd_debug_all() {
+    need jdb jq
+    [ -n "$HERDR" ] || die "herdr not found on PATH"
+    local ports from dir=right out pane n=0 self
+    ports=$(live_ports)
+    [ -n "$ports" ] || { pause "No live JDWP ports found."; exit 0; }
+    # Popups get HERDR_ACTIVE_PANE_ID but not HERDR_PANE_ID, so --current cannot resolve.
+    from=${HERDR_ACTIVE_PANE_ID:-${HERDR_PANE_ID:-}}
+    [ -n "$from" ] || die "no pane to split from (HERDR_ACTIVE_PANE_ID unset)"
+    self=$SELF
+    for port in $ports; do
+        out=$("$HERDR" pane split --pane "$from" --direction "$dir" --ratio 0.5 --cwd "$ROOT" 2>&1)
+        pane=$(printf '%s' "$out" | "$JQ" -r '.result.pane.pane_id // .result.pane_id // empty' 2>/dev/null)
+        [ -n "$pane" ] || { pause "could not read pane id from:
+$out"; exit 1; }
+        "$HERDR" pane rename "$pane" "jdb $(svc_name "$port") :$port" >/dev/null 2>&1
+        "$HERDR" pane run "$pane" "$self debug $port" >/dev/null 2>&1
+        from=$pane
+        [ "$dir" = right ] && dir=down || dir=right
+        n=$((n + 1))
+    done
+    printf 'attached %s service(s)\n\nprefix+z  zoom a pane fullscreen (and back)\nprefix+r  resize mode\nprefix+?  full key list\n' "$n"
+}
+
+# --------------------------------------------------------------- doctor ----
+cmd_doctor() {
+    local ok=0
+    printf 'herdr-nav %s\n\n' "$VERSION"
+    printf 'required\n'
+    for pair in "fzf:$FZF" "fd:$FD" "bat:$BAT" "rg:$RG"; do
+        if [ -n "${pair#*:}" ]; then printf '  %-6s %s\n' "${pair%%:*}" "${pair#*:}"
+        else printf '  %-6s MISSING\n' "${pair%%:*}"; ok=1; fi
+    done
+    printf '\noptional\n'
+    local anymissing=0
+    for pair in "lf:$LF" "jdb:$JDB" "jq:$JQ" "herdr:$HERDR"; do
+        if [ -n "${pair#*:}" ]; then printf '  %-6s %s\n' "${pair%%:*}" "${pair#*:}"
+        else printf '  %-6s -\n' "${pair%%:*}"; anymissing=1; fi
+    done
+    [ $anymissing -eq 1 ] && printf '  (tree needs lf; debug needs jdb; debug-all needs jq + herdr)\n'
+    printf '\ncontext\n'
+    printf '  pane cwd     %s\n' "$PANE_CWD"
+    printf '  repo root    %s\n' "$ROOT"
+    printf '  pane id      %s\n' "${TARGET:-(none - not running inside herdr)}"
+    printf '  open action  %s\n' "$OPEN_ACTION"
+    printf '  config       %s%s\n' "$CONF" "$([ -r "$CONF" ] || printf ' (not created)')"
+    printf '  debug ports  %s\n' "${DEBUG_PORTS:-(none configured - every listening port is offered)}"
+    [ $ok -eq 0 ] && printf '\nall required tools present\n' || printf '\nInstall what is missing, then re-run.\n'
+    return $ok
+}
+
+# ----------------------------------------------------------------- keys ----
+# herdr action bindings that exist by default even when absent from config.toml.
+HERDR_DEFAULTS='prefix+? prefix+s prefix+q prefix+o prefix+w prefix+g prefix+c prefix+p
+prefix+n prefix+e prefix+h prefix+j prefix+k prefix+l prefix+v prefix+x prefix+z prefix+r
+prefix+b prefix+tab prefix+[ prefix+minus prefix+shift+r prefix+shift+n prefix+shift+w
+prefix+shift+d prefix+shift+t prefix+shift+x prefix+shift+p prefix+shift+tab ctrl+v'
+
+taken_keys() {
+    local cfg=${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}
+    [ -r "$cfg" ] && grep -oE '^[[:space:]]*key[[:space:]]*=[[:space:]]*"[^"]+"' "$cfg" \
+        | sed -E 's/.*"([^"]+)".*/\1/'
+    printf '%s\n' $HERDR_DEFAULTS
+}
+
+cmd_keys() {
+    local self taken want letter free alt
+    self=$SELF
+    taken=$(taken_keys | sort -u)
+
+    printf '# herdr-nav bindings -- paste into %s\n' "${HERDR_CONFIG_PATH:-$HOME/.config/herdr/config.toml}"
+    printf '# Generated by: herdr-nav keys\n'
+    printf '# Absolute path is required: the herdr server runs with a bare PATH.\n'
+    printf '#\n# prefix+shift+X throughout: shift is carried in the character itself, while\n'
+    printf '# alt/option arrives as ESC+<key> -- two bytes that can land split over an\n'
+    printf '# SSH attach, eating the first press. Letters avoid herdr defaults.\n\n'
+
+    # subcommand:letter:type:description
+    for want in file:o:popup:'go to file' class:c:popup:'go to class' grep:f:popup:'find in files' \
+                recent:e:popup:'recent files' tree:v:popup:'project tree' \
+                usages:u:popup:'find usages of an identifier' \
+                callers:i:popup:'find callers of a method' \
+                def:m:popup:'go to definition' \
+                breakpoint:b:popup:'browse file, set breakpoints' \
+                debug:s:pane:'attach jdb' debug-all:a:popup:'attach jdb to every service'; do
+        local sub=${want%%:*} rest=${want#*:}
+        letter=${rest%%:*}; rest=${rest#*:}
+        local kind=${rest%%:*} desc=${rest#*:}
+        local key="prefix+shift+$letter"
+        if printf '%s\n' "$taken" | grep -qxF "$key"; then
+            free=""
+            for alt in i m q y z a c e; do
+                printf '%s\n' "$taken" | grep -qxF "prefix+shift+$alt" || { free=$alt; break; }
+            done
+            printf '# NOTE: %s is already bound in your config -- using prefix+shift+%s for %s instead.\n' \
+                   "$key" "${free:-?}" "$sub"
+            [ -n "$free" ] && key="prefix+shift+$free" || { printf '# No free letter found; bind %s yourself.\n\n' "$sub"; continue; }
+            taken=$(printf '%s\n%s\n' "$taken" "$key")
+        fi
+        printf '# %s\n[[keys.command]]\nkey = "%s"\ntype = "%s"\ncommand = "%s %s"\n' \
+               "$desc" "$key" "$kind" "$self" "$sub"
+        [ "$kind" = popup ] && printf 'width = "90%%"\nheight = "85%%"\n'
+        printf '\n'
+    done
+    printf '# Then: herdr config check && herdr server reload-config\n'
+}
+
+case ${1:-} in
+    file|class|grep|recent)  need fzf fd bat rg; guard_root; "cmd_$1" "${2:-}" ;;
+    tree)                    guard_root; cmd_tree ;;
+    breakpoint)              need fzf fd bat; guard_root; cmd_breakpoint ;;
+    lines)                   need fzf bat; guard_root; cmd_lines "${2:?file required}" ;;
+    bp)                      printf 'stop at %s\n' "$(fqcn "${2%%:*}")$(case ${2:-} in *:*) printf ':%s' "${2##*:}";; esac)" ;;
+    search)                  guard_root; cmd_search "${2:-}" ;;
+    usages)                  need fzf bat rg; guard_root; cmd_usages "${2:-}" "${3:-}" ;;
+    callers)                 need fzf bat rg; guard_root; cmd_callers "${2:-}" "${3:-}" ;;
+    def)                     need fzf bat rg; guard_root; cmd_def "${2:-}" ;;
+    debug)                   guard_root; cmd_debug "${2:-}" ;;
+    debug-all)               guard_root; cmd_debug_all ;;
+    doctor)                  cmd_doctor ;;
+    keys)                    cmd_keys ;;
+    version|--version|-v)    printf 'herdr-nav %s\n' "$VERSION" ;;
+    ''|help|--help|-h)
+        sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;
+    *) die "unknown command: $1  (try: herdr-nav help)" ;;
+esac

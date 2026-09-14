@@ -1,0 +1,30 @@
+# herdr-nav config — copy to ~/.config/herdr-nav/config
+# Sourced as shell, so these are plain assignments.
+
+# What Enter does with a selection: pane | idea | print
+# pane  = type path:line into the pane you opened the popup from (default)
+# idea  = open in a running JetBrains IDE's built-in server
+# print = just show the path
+HERDR_NAV_OPEN=pane
+
+# JetBrains built-in server port, used when HERDR_NAV_OPEN=idea.
+# Note: a remote-development backend ("idea serverMode") does NOT serve the
+# file-open endpoint — only a normal desktop IDE does.
+HERDR_NAV_IDEA_PORT=63342
+
+# JDWP ports this project exposes, as "port:Name" pairs. The debug picker shows
+# these names and ignores every other listening port, so a stray listener never
+# gets offered as a debug target. Leave empty to offer every listening port.
+# HERDR_NAV_DEBUG_PORTS="5005:api 5006:worker 5010:gateway 5019:scheduler"
+HERDR_NAV_DEBUG_PORTS=""
+
+# Live search tuning. Ripgrep answers a real query in about 0.1s, so there is
+# nothing to index; what hurts is the first keystroke, where a 1-char query can
+# match millions of lines that fzf then has to ingest.
+# HERDR_NAV_MIN_QUERY=3      # ignore queries shorter than this
+# HERDR_NAV_MAX_HITS=20000   # cap lines handed to fzf
+
+# Override tool discovery only if they are somewhere unusual.
+# HERDR_NAV_FZF=/opt/bin/fzf
+# HERDR_NAV_FD=/opt/bin/fd
+# HERDR_NAV_BAT=/opt/bin/bat
