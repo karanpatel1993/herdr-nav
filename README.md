@@ -132,14 +132,27 @@ ports so the picker shows services instead of bare numbers.
 
 | | |
 |---|---|
-| **Linux** | fully supported, developed and tested here |
-| **macOS** | supported — port lookup falls back to `lsof`/`ps` where Linux uses `ss` and `/proc`, and `tail -r` stands in for `tac`. **Not yet verified on real hardware** |
-| **Windows** | no. This is a bash script; use WSL, where it behaves as Linux |
+| **Linux** | `ss`, `/proc`, `tac` — developed and tested here |
+| **macOS / BSD** | `lsof`, `ps`, `tail -r` — implemented and branch-tested, not yet run on real hardware |
+| **Windows** | no. Use WSL, where it behaves as Linux |
 
-macOS notes: the system `bash` is 3.2, so the script avoids constructs that
-break there (no empty-array expansion under `set -u`). If `herdr-nav` misbehaves
-on macOS, `herdr-nav doctor` prints everything it detected — please open an issue
-with that output.
+The platform is decided **once**, from `uname`, and each one gets its own
+implementation of the three OS-specific lookups — there is no per-call probing
+or silent fallback. The tool a platform needs is checked up front, so a missing
+`ss` or `lsof` fails loudly with the reason instead of quietly taking another
+path. `herdr-nav doctor` prints which set is active:
+
+```
+platform
+  detected     linux (Linux)
+  port lookup  ss (present)
+```
+
+Only the debugger commands need that tool; search and navigation work without it.
+
+macOS ships bash 3.2, so the script avoids what breaks there (no empty-array
+expansion under `set -u`). If something misbehaves, open an issue with your
+`herdr-nav doctor` output.
 
 ## What it can't do
 

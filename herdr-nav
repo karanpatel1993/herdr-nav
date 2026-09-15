@@ -62,29 +62,48 @@ descend() { HERDR_NAV_DEPTH=$((DEPTH + 1)) "$@"; }
 MIN_QUERY=${HERDR_NAV_MIN_QUERY:-3}
 MAX_HITS=${HERDR_NAV_MAX_HITS:-20000}
 
-# Portability shims. Linux has ss and /proc; macOS has lsof and ps. BSD coreutils
-# lack tac. Keep every platform difference behind one of these.
-listening_ports() {
-    if command -v ss >/dev/null 2>&1; then
-        ss -ltn 2>/dev/null | awk '{print $4}' | grep -oE ':[0-9]+$' | tr -d ':'
-    elif command -v lsof >/dev/null 2>&1; then
-        lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $9}' | grep -oE '[:.][0-9]+$' | tr -d ':.'
-    elif command -v netstat >/dev/null 2>&1; then
-        netstat -an 2>/dev/null | grep -i 'listen' | awk '{print $4}' | grep -oE '[:.][0-9]+$' | tr -d ':.'
-    fi | sort -un
-}
-pid_on_port() {
-    if command -v ss >/dev/null 2>&1; then
+# Platform is decided ONCE, from uname -- not re-probed per call. Each platform
+# gets its own implementation of the three OS-specific lookups, and the tool it
+# needs is verified up front, so a missing tool fails loudly here rather than
+# silently taking some other path later. `herdr-nav doctor` prints which set is
+# active and whether its backing tool is present.
+case $(uname -s) in
+    Linux)  PLATFORM=linux ;;
+    Darwin) PLATFORM=darwin ;;
+    *BSD)   PLATFORM=darwin ;;          # same toolset: lsof + ps + tail -r
+    *)      PLATFORM=unknown ;;
+esac
+
+if [ "$PLATFORM" = linux ]; then
+    PLATFORM_TOOL=ss
+    listening_ports() {
+        ss -ltn 2>/dev/null | awk '{print $4}' | grep -oE ':[0-9]+$' | tr -d ':' | sort -un
+    }
+    pid_on_port() {
         ss -ltnp 2>/dev/null | grep ":$1 " | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2
-    elif command -v lsof >/dev/null 2>&1; then
-        lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -1
-    fi
+    }
+    pid_cmdline() { tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null; }
+    rev_lines()   { tac; }
+else
+    PLATFORM_TOOL=lsof
+    listening_ports() {
+        lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null \
+            | awk 'NR>1{print $9}' | grep -oE '[:.][0-9]+$' | tr -d ':.' | sort -un
+    }
+    pid_on_port() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -1; }
+    pid_cmdline() { ps -o command= -p "$1" 2>/dev/null; }
+    rev_lines()   { tail -r; }
+fi
+
+# Only the debugger commands need the platform tool; searching does not.
+need_platform() {
+    [ "$PLATFORM" != unknown ] || die "unsupported platform: $(uname -s). Linux and macOS are supported."
+    command -v "$PLATFORM_TOOL" >/dev/null 2>&1 || die \
+"$PLATFORM_TOOL is required for the debugger commands on $PLATFORM but is not installed.
+  linux:  it ships in iproute2
+  macOS:  it is part of the base system
+Search and navigation work without it."
 }
-pid_cmdline() {
-    if [ -r "/proc/$1/cmdline" ]; then tr '\0' ' ' < "/proc/$1/cmdline"
-    else ps -o command= -p "$1" 2>/dev/null; fi
-}
-rev_lines() { tac 2>/dev/null || tail -r; }
 
 die()   { printf 'herdr-nav: %s\n' "$*" >&2; exit 1; }
 pause() { printf '\n%s\nPress Enter to close... ' "$*"; read -r _; }
@@ -467,7 +486,7 @@ jvm_tree() {                       # which checkout the JVM on $1 was started fr
 sourcepath() { "$FD" --type d --max-depth 4 '^(src|java)$' "$ROOT" 2>/dev/null | tr '\n' ':' | sed 's/:$//'; }
 
 cmd_debug() {
-    need jdb
+    need jdb; need_platform
     local port=$1 line sp
     if [ -z "$port" ]; then
         need fzf
@@ -489,7 +508,7 @@ cmd_debug() {
 }
 
 cmd_debug_all() {
-    need jdb jq
+    need jdb jq; need_platform
     [ -n "$HERDR" ] || die "herdr not found on PATH"
     local ports from dir=right out pane n=0 self
     ports=$(live_ports)
@@ -589,6 +608,11 @@ cmd_doctor() {
         else printf '  %-6s -\n' "${pair%%:*}"; anymissing=1; fi
     done
     [ $anymissing -eq 1 ] && printf '  (tree needs lf; debug needs jdb; debug-all needs jq + herdr)\n'
+    printf '\nplatform\n'
+    printf '  detected     %s (%s)\n' "$PLATFORM" "$(uname -s)"
+    printf '  port lookup  %s %s\n' "$PLATFORM_TOOL" \
+        "$(command -v "$PLATFORM_TOOL" >/dev/null 2>&1 && printf '(present)' || printf '(MISSING)')"
+
     printf '\ncontext\n'
     printf '  pane cwd     %s\n' "$PANE_CWD"
     printf '  repo root    %s\n' "$ROOT"
