@@ -1,10 +1,9 @@
 # herdr-nav
 
-Find files, search code and debug Java inside [herdr](https://herdr.dev) — so
-your agents and your code live in one place.
+Find files, search code and debug Java inside [herdr](https://herdr.dev).
 
 A single shell script wiring `fzf`, `ripgrep` and `jdb` into herdr popups,
-scoped automatically to the git worktree of the pane you are in.
+scoped to the git worktree of the pane you are in.
 
 | | |
 |---|---|
@@ -26,27 +25,18 @@ scoped automatically to the git worktree of the pane you are in.
 curl -fsSLO https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav
 chmod +x herdr-nav
 ./herdr-nav install
-```
 
-No `curl | sh` — you download one file, read it if you want, then run it. It
-moves itself to a directory already on your `PATH` (or `~/.local/bin`, telling
-you how to add it). Override with `HERDR_NAV_BIN=`.
-
-Then:
-
-```sh
 herdr-nav doctor    # what's missing and how to get it
 herdr-nav keys      # prints bindings — paste into ~/.config/herdr/config.toml
 herdr config check && herdr server reload-config
 ```
 
 Needs `fzf`, `fd`, `bat`, `ripgrep`. `doctor` prints the install command for your
-package manager, or `herdr-nav install-deps` fetches static builds into
-`~/.local/bin` with no sudo.
+package manager; `herdr-nav install-deps` fetches static builds with no sudo.
 
 ## Navigating
 
-Results are not dead ends — `Enter` takes you there and you keep going:
+`Enter` on a result takes you there, ready to jump again:
 
 ```
 prefix+⇧I    Callers of: fillDob
@@ -56,20 +46,17 @@ Ctrl+]       → pick an identifier → its definition
 Esc          → back one step
 ```
 
-`Enter` descends, `Esc` climbs. The mouse works everywhere — click to select,
-scroll the list and the preview.
+The mouse works everywhere — click to select, scroll the list and the preview.
 
-**In a results list:** `Ctrl+P` send `path:line` to your pane · `Ctrl+T` breakpoint ·
+**Results list:** `Ctrl+P` send `path:line` to your pane · `Ctrl+T` breakpoint ·
 `Ctrl+V` view · `Alt+W` resize preview.
-**In the line browser:** `Tab` mark several lines, so one pass sets many breakpoints.
+**Line browser:** `Tab` marks several lines, so one pass sets many breakpoints.
 
 ## Debugging
 
-`prefix+⇧S` picks from live JDWP ports and attaches `jdb` with your source tree
-on the sourcepath. `prefix+⇧A` opens one pane per service — JDWP allows a single
-debugger per JVM, so a multi-service trace needs a session each.
-
-`prefix+⇧B` browses a file and turns marked lines into `stop at` commands.
+`prefix+⇧S` attaches `jdb` to a live service with your source tree on the
+sourcepath. `prefix+⇧A` opens a pane per service. `prefix+⇧B` turns lines you
+mark into `stop at` commands.
 
 For variables printed on every stop, put this in `~/.jdbrc`:
 
@@ -78,8 +65,8 @@ monitor where
 monitor locals
 ```
 
-The port picker warns when a JVM was built from a **different worktree** than
-your pane — line numbers only match the code that is actually running.
+The port picker warns when a service was built from a different worktree than
+your pane.
 
 ## Configuration
 
@@ -91,23 +78,20 @@ Optional, `~/.config/herdr-nav/config` — see [`config.example`](config.example
 | `HERDR_NAV_OPEN` | `pane` | `pane`, `idea` or `print` |
 | `HERDR_NAV_MIN_QUERY` | `3` | ignore shorter live-search queries |
 | `HERDR_NAV_MAX_HITS` | `20000` | cap on results |
+| `HERDR_NAV_BIN` | — | where `install` puts the script |
 
 ## Limits
 
-**Search is text, not semantics.** It cannot tell your `status` from another
-class's `status`. Overloads look alike, interface dispatch and reflection are
-invisible, and Lombok or jar code has no source to find. **Zero results means
-"not found textually", never "this is dead code".**
+Search is text, not semantics. It cannot tell your `status` from another class's
+`status`; overloads look alike; interface dispatch, reflection, Lombok and jar
+code are invisible. **Zero results means "not found textually", not "dead code".**
 
-For a local variable, scope it to its file — repo-wide, a short name is mostly
-noise:
+Scope a local variable to its file — repo-wide, a short name is mostly noise:
 
 ```sh
 herdr-nav usages uc path/to/TheFile.java
 ```
 
-**Linux** and **macOS** are supported; Windows needs WSL. Platform is chosen once
-from `uname`, and `doctor` shows which. See [NOTES.md](NOTES.md) for the details
-and the two herdr gotchas worth knowing.
+Linux and macOS; Windows needs WSL. [NOTES.md](NOTES.md) has the details.
 
 MIT
