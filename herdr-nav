@@ -25,6 +25,7 @@ mkdir -p "$CONF_DIR" "$STATE"
 # shellcheck disable=SC1090
 [ -r "$CONF" ] && . "$CONF"
 
+ORIG_PATH=${PATH:-}          # before we widen it, so `install` can advise honestly
 PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}
 export PATH
 
@@ -48,7 +49,7 @@ IDEA_PORT=${HERDR_NAV_IDEA_PORT:-63342}
 DEBUG_PORTS=${HERDR_NAV_DEBUG_PORTS:-}
 
 SELF=$(command -v "$0" 2>/dev/null || printf '%s' "$0")
-case $SELF in /*) ;; *) SELF=$PWD/$SELF ;; esac
+case $SELF in /*) ;; *) SELF=$PWD/${SELF#./} ;; esac
 
 # Ripgrep answers a real query in ~0.1s, so there is nothing to index. What hurts
 # is the first keystroke: a 1-char query can match millions of lines and fzf has
@@ -605,7 +606,7 @@ cmd_install() {
     else
         dest=""
         for d in "$HOME/.local/bin" "$HOME/bin"; do
-            case ":$PATH:" in *":$d:"*) [ -d "$d" ] && { dest=$d; break; } ;; esac
+            case ":$ORIG_PATH:" in *":$d:"*) [ -d "$d" ] && { dest=$d; break; } ;; esac
         done
         [ -n "$dest" ] || dest=$HOME/.local/bin
     fi
@@ -620,7 +621,7 @@ cmd_install() {
         printf 'Installed to %s/herdr-nav\n' "$dest"
     fi
 
-    case ":$PATH:" in
+    case ":$ORIG_PATH:" in
         *":$dest:"*) ;;
         *)  local sh_name rc
             sh_name=${SHELL:-}; sh_name=${sh_name##*/}
