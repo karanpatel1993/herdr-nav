@@ -66,13 +66,13 @@ Hence `HERDR_NAV_MIN_QUERY` (default 3) and `HERDR_NAV_MAX_HITS` (default 20000)
 ## How callers and definitions are told apart
 
 A Java declaration puts a modifier or a return type immediately before the name;
-a call site does not. `⇧I` matches `name(` and subtracts anything matching the
-declaration shape; `⇧M` keeps only the declarations, which is why it returns the
-interface method *and* every override in one list.
+a call site does not. `callers` matches `name(` and subtracts anything matching
+the declaration shape; `def` keeps only the declarations, which is why it returns
+the interface method *and* every override in one list.
 
 Accurate for distinctive names, noisy for short ones:
 
-| | `⇧U` usages | `⇧I` callers |
+| | `usages` | `callers` |
 |---|---|---|
 | `fillDob` | 2 (call + declaration) | 1 |
 | `getNormalizedString` | 84 | 74 |

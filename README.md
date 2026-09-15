@@ -59,7 +59,7 @@ over.
 Tracing who calls `fillDob`:
 
 ```
-prefix+⇧I     type "fillDob"        → every call site
+prefix+Space  pick "callers"        → type "fillDob" → every call site
 Enter         on a result           → opens that file, on that line
 Ctrl+R        pick an identifier    → every caller of it
 Enter                               → opens that one
