@@ -44,21 +44,42 @@ herdr-nav install-deps    # downloads them into ~/.local/bin
 
 ## Navigating
 
-`Enter` on a result takes you there, ready to jump again:
+Every search gives you a list. `Enter` on a result opens that file at that line —
+where you can search again. That is how you follow a call chain without starting
+over.
+
+Tracing who calls `fillDob`:
 
 ```
-prefix+⇧I    Callers of: fillDob
-Enter        → lands in that file, on that line
-Ctrl+R       → pick an identifier → its callers (or usages)
-Ctrl+]       → pick an identifier → its definition
-Esc          → back one step
+prefix+⇧I     type "fillDob"        → every call site
+Enter         on a result           → opens that file, on that line
+Ctrl+R        pick an identifier    → every caller of it
+Enter                               → opens that one
+Esc                                 → back one step
 ```
 
-The mouse works everywhere — click to select, scroll the list and the preview.
+### Keys
 
-**Results list:** `Ctrl+P` send `path:line` to your pane · `Ctrl+T` breakpoint ·
-`Ctrl+V` view · `Alt+W` resize preview.
-**Line browser:** `Tab` marks several lines, so one pass sets many breakpoints.
+Once a list of results is open:
+
+| | |
+|---|---|
+| `Enter` | open the file there |
+| `Ctrl+P` | send `path:line` to your pane |
+| `Ctrl+T` | set a breakpoint there |
+| `Ctrl+V` | view the file |
+| `Alt+W` | resize the preview |
+
+Once a file is open:
+
+| | |
+|---|---|
+| `Ctrl+R` | callers or usages of an identifier on this line |
+| `Ctrl+]` | definition of an identifier on this line |
+| `Tab` | mark a line — mark several, then `Enter` sets them all |
+| `Enter` | set a breakpoint on the marked lines |
+
+Click to select and scroll with the wheel anywhere, including the preview.
 
 ## Debugging
 
