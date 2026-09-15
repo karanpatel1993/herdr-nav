@@ -1,0 +1,95 @@
+# Notes
+
+Detail that would clutter the README. Read it if something surprises you.
+
+## Two herdr gotchas
+
+**Bindings need an absolute path.** The herdr server runs with a bare `PATH` —
+no `~/.local/bin`, no version-manager bins. `herdr config check` reports `ok` for
+a bare command name, which then fails silently at keypress time, with no error
+anywhere. `herdr-nav keys` emits absolute paths for exactly this reason.
+
+**Under `herdr --remote`, the client uses your *local* keybindings.** Bindings
+that live in the remote config are only reachable *after* the prefix, because
+the server resolves post-prefix keys. So `prefix+X` works and a bare `ctrl+alt+X`
+chord does not — unless you attach with `--remote-keybindings server`.
+
+## Why shift, not option
+
+Alt/option arrives as `ESC` + `<key>`: two bytes. Over an SSH attach they can
+land in separate packets, and the first press is swallowed while the terminal
+waits to see whether that `ESC` was a bare Escape. Shift is carried in the
+character itself, so there is no timing window.
+
+The same reasoning applies inside fzf, where `Ctrl+T` and `Ctrl+R` are the
+reliable keys and their `Alt` equivalents are kept only as aliases.
+
+## Platform handling
+
+Chosen once from `uname`, never re-probed:
+
+| | port lookup | process args | reverse |
+|---|---|---|---|
+| Linux | `ss` | `/proc/<pid>/cmdline` | `tac` |
+| macOS / BSD | `lsof` | `ps -o command=` | `tail -r` |
+
+Each platform has its own implementation rather than a fallback chain, and the
+tool it needs is checked before any debugger command runs — a missing `ss` or
+`lsof` fails with the reason instead of quietly taking another path. Only the
+debugger needs it; search and navigation do not.
+
+`herdr-nav doctor` prints what is active:
+
+```
+platform
+  detected     linux (Linux)
+  port lookup  ss (present)
+```
+
+macOS ships bash 3.2, so the script avoids what breaks there — notably empty
+array expansion under `set -u`.
+
+## Search performance
+
+There is nothing to index. Ripgrep answers a real query over ~55k files in about
+0.12s. What hurts is the first keystroke: a one-character query can match
+millions of lines, which fzf then has to ingest.
+
+| query | without a guard | with |
+|---|---|---|
+| `e` | 6,133,175 lines, 0.58s | 0 lines, 0.01s |
+| `public` | 112,874 lines | 20,000 lines, 0.06s |
+| `esDirectory` | 0.12s | 0.13s |
+
+Hence `HERDR_NAV_MIN_QUERY` (default 3) and `HERDR_NAV_MAX_HITS` (default 20000).
+
+## How callers and definitions are told apart
+
+A Java declaration puts a modifier or a return type immediately before the name;
+a call site does not. `⇧I` matches `name(` and subtracts anything matching the
+declaration shape; `⇧M` keeps only the declarations, which is why it returns the
+interface method *and* every override in one list.
+
+Accurate for distinctive names, noisy for short ones:
+
+| | `⇧U` usages | `⇧I` callers |
+|---|---|---|
+| `fillDob` | 2 (call + declaration) | 1 |
+| `getNormalizedString` | 84 | 74 |
+
+## Breakpoints
+
+Marked lines become `stop at <fqcn>:<line>` commands, joined so that every one
+but the last executes on arrival — you press the final Enter. Nothing fires in a
+pane that isn't a debugger without you seeing it first.
+
+Line breakpoints drift when you edit the file. `stop in <class>.<method>` does
+not, and is often the better choice.
+
+## No ⌘-click
+
+Terminal mouse reports carry the button, the position and Control — there is no
+bit for Command, so a terminal cannot distinguish ⌘-click from a plain click.
+herdr's own link handlers use Ctrl+click for this reason, and they only fire on
+URLs, not arbitrary source identifiers. `Ctrl+R` on a clicked line is the
+equivalent here.
