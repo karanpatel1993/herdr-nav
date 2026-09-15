@@ -62,23 +62,47 @@ descend() { HERDR_NAV_DEPTH=$((DEPTH + 1)) "$@"; }
 MIN_QUERY=${HERDR_NAV_MIN_QUERY:-3}
 MAX_HITS=${HERDR_NAV_MAX_HITS:-20000}
 
+# Portability shims. Linux has ss and /proc; macOS has lsof and ps. BSD coreutils
+# lack tac. Keep every platform difference behind one of these.
+listening_ports() {
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltn 2>/dev/null | awk '{print $4}' | grep -oE ':[0-9]+$' | tr -d ':'
+    elif command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $9}' | grep -oE '[:.][0-9]+$' | tr -d ':.'
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -an 2>/dev/null | grep -i 'listen' | awk '{print $4}' | grep -oE '[:.][0-9]+$' | tr -d ':.'
+    fi | sort -un
+}
+pid_on_port() {
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltnp 2>/dev/null | grep ":$1 " | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2
+    elif command -v lsof >/dev/null 2>&1; then
+        lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -1
+    fi
+}
+pid_cmdline() {
+    if [ -r "/proc/$1/cmdline" ]; then tr '\0' ' ' < "/proc/$1/cmdline"
+    else ps -o command= -p "$1" 2>/dev/null; fi
+}
+rev_lines() { tac 2>/dev/null || tail -r; }
+
 die()   { printf 'herdr-nav: %s\n' "$*" >&2; exit 1; }
 pause() { printf '\n%s\nPress Enter to close... ' "$*"; read -r _; }
 
 need() {
-    local missing=() t
+    local missing="" t
     for t in "$@"; do
         case $t in
-            fzf) [ -n "$FZF" ] || missing+=(fzf) ;;
-            fd)  [ -n "$FD" ]  || missing+=("fd (or fdfind)") ;;
-            bat) [ -n "$BAT" ] || missing+=("bat (or batcat)") ;;
-            rg)  [ -n "$RG" ]  || missing+=(ripgrep) ;;
-            jdb) [ -n "$JDB" ] || missing+=("jdb (a JDK)") ;;
-            jq)  [ -n "$JQ" ]  || missing+=(jq) ;;
+            fzf) [ -n "$FZF" ] || missing="$missing fzf" ;;
+            fd)  [ -n "$FD" ]  || missing="$missing fd" ;;
+            bat) [ -n "$BAT" ] || missing="$missing bat" ;;
+            rg)  [ -n "$RG" ]  || missing="$missing ripgrep" ;;
+            jdb) [ -n "$JDB" ] || missing="$missing jdb(JDK)" ;;
+            jq)  [ -n "$JQ" ]  || missing="$missing jq" ;;
         esac
     done
-    [ ${#missing[@]} -eq 0 ] && return 0
-    pause "herdr-nav needs: ${missing[*]}
+    [ -z "$missing" ] && return 0
+    pause "herdr-nav needs:$missing
 Run 'herdr-nav doctor' for details."
     exit 1
 }
@@ -222,9 +246,9 @@ cmd_usages() {
         name=$(printf '%s' "$name" | tr -d '[:space:]')
     fi
     [ -n "$name" ] || exit 0
-    local -a rgargs=(--column --line-number --no-heading --color=always --word-regexp
-                     --hidden --follow --glob '!.git' --max-columns 400 --)
-    hits=$("$RG" "${rgargs[@]}" "$name" ${scope:+"$scope"} 2>/dev/null | head -n "$MAX_HITS")
+    hits=$("$RG" --column --line-number --no-heading --color=always --word-regexp \
+                 --hidden --follow --glob '!.git' --max-columns 400 \
+                 -- "$name" ${scope:+"$scope"} 2>/dev/null | head -n "$MAX_HITS")
     [ -n "$hits" ] || { pause "No usages of '$name'${scope:+ in $(basename "$scope")}."; exit 0; }
     while true; do
     out=$(printf '%s\n' "$hits" \
@@ -369,7 +393,7 @@ idents_on_line() {
 cmd_recent() {
     local out
     [ -s "$RECENT" ] || { pause "Nothing opened through herdr-nav yet."; exit 0; }
-    out=$(tac "$RECENT" | awk '!seen[$0]++' | pick "recent> " "$(preview_file)" \
+    out=$(rev_lines < "$RECENT" | awk '!seen[$0]++' | pick "recent> " "$(preview_file)" \
           --scheme=path --preview-window=right,60%,border-left) || exit 0
     [ -n "$out" ] || exit 0
     dispatch "${out%%$'\n'*}" "${out#*$'\n'}" ""
@@ -429,14 +453,14 @@ cmd_breakpoint() {
 
 # ---------------------------------------------------------------- debug ----
 live_ports() {
-    ss -ltn 2>/dev/null | awk '{print $4}' | grep -oE ':[0-9]+$' | tr -d ':' | sort -un \
+    listening_ports \
     | while read -r p; do known_port "$p" && [ "$p" -ge 1024 ] && printf '%s\n' "$p"; done
 }
 jvm_tree() {                       # which checkout the JVM on $1 was started from
     local pid src
-    pid=$(ss -ltnp 2>/dev/null | grep ":$1 " | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
-    [ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ] || { printf '?'; return; }
-    src=$(tr '\0' ' ' < "/proc/$pid/cmdline" | grep -oE "$HOME/[^ ]*/" | head -1)
+    pid=$(pid_on_port "$1")
+    [ -n "$pid" ] || { printf '?'; return; }
+    src=$(pid_cmdline "$pid" | grep -oE "$HOME/[^ ]*/" | head -1)
     src=${src%/}; src=${src##*/}
     printf '%s' "${src:-?}"
 }

@@ -128,6 +128,19 @@ ports so the picker shows services instead of bare numbers.
 | `HERDR_NAV_MIN_QUERY` | `3` | ignore shorter live-search queries |
 | `HERDR_NAV_MAX_HITS` | `20000` | cap on results handed to fzf |
 
+## Platform support
+
+| | |
+|---|---|
+| **Linux** | fully supported, developed and tested here |
+| **macOS** | supported — port lookup falls back to `lsof`/`ps` where Linux uses `ss` and `/proc`, and `tail -r` stands in for `tac`. **Not yet verified on real hardware** |
+| **Windows** | no. This is a bash script; use WSL, where it behaves as Linux |
+
+macOS notes: the system `bash` is 3.2, so the script avoids constructs that
+break there (no empty-array expansion under `set -u`). If `herdr-nav` misbehaves
+on macOS, `herdr-nav doctor` prints everything it detected — please open an issue
+with that output.
+
 ## What it can't do
 
 **No semantics.** Search is regex over text. It cannot tell your `status` from an
