@@ -23,8 +23,12 @@ scoped automatically to the git worktree of the pane you are in.
 ## Install
 
 ```sh
+mkdir -p ~/.local/bin
 curl -fsSL https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav \
   -o ~/.local/bin/herdr-nav && chmod +x ~/.local/bin/herdr-nav
+
+# if ~/.local/bin isn't on your PATH yet:
+export PATH="$HOME/.local/bin:$PATH"     # add to ~/.zshrc or ~/.bashrc
 
 herdr-nav doctor    # what's missing and how to get it
 herdr-nav keys      # prints bindings — paste into ~/.config/herdr/config.toml
