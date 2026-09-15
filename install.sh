@@ -43,7 +43,15 @@ echo
 case ":$PATH:" in
     *":$BIN:"*) ;;
     *)
-        case "${SHELL##*/}" in zsh) RC=~/.zshrc ;; bash) RC=~/.bashrc ;; fish) RC=~/.config/fish/config.fish ;; *) RC="your shell rc" ;; esac
+        # $SHELL is not always set (containers, cron, some CI); set -u would
+        # otherwise abort here, right before the advice that matters most.
+        sh_name=${SHELL:-}; sh_name=${sh_name##*/}
+        case "$sh_name" in
+            zsh)  RC=~/.zshrc ;;
+            bash) RC=~/.bashrc ;;
+            fish) RC=~/.config/fish/config.fish ;;
+            *)    RC="your shell rc" ;;
+        esac
         echo "$BIN is not on your PATH. Add it:"
         echo "  echo 'export PATH=\"$BIN:\$PATH\"' >> $RC && exec \$SHELL"
         echo
