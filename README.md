@@ -23,17 +23,21 @@ scoped automatically to the git worktree of the pane you are in.
 ## Install
 
 ```sh
-mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav \
-  -o ~/.local/bin/herdr-nav && chmod +x ~/.local/bin/herdr-nav
+curl -fsSL https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/install.sh | sh
+```
 
-# if ~/.local/bin isn't on your PATH yet:
-export PATH="$HOME/.local/bin:$PATH"     # add to ~/.zshrc or ~/.bashrc
+Then:
 
+```sh
 herdr-nav doctor    # what's missing and how to get it
 herdr-nav keys      # prints bindings — paste into ~/.config/herdr/config.toml
 herdr config check && herdr server reload-config
 ```
+
+The installer picks a directory already on your `PATH`, or falls back to
+`~/.local/bin` and tells you how to add it. Override with `HERDR_NAV_BIN=`.
+Prefer to do it by hand? The script is one file — download it anywhere and
+`chmod +x`.
 
 `herdr-nav keys` skips any key you already use and tells you where it moved
 things. It prints; you paste. It never edits your config.
