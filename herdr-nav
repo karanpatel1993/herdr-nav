@@ -4,6 +4,7 @@
 #   herdr-nav file | class | grep [query] | recent | tree
 #   herdr-nav breakpoint | lines <file> | bp <file>[:line]
 #   herdr-nav debug [port] | debug-all
+#   herdr-nav menu        # one key, everything else is in here
 #   herdr-nav install | doctor | install-deps | keys | version
 #
 # Install: put this on PATH, then `herdr-nav keys` and paste what it prints
@@ -593,6 +594,35 @@ cmd_install_deps() {
     printf 'Now run: herdr-nav doctor\n'
 }
 
+# ----------------------------------------------------------------- menu ----
+# One key to remember. Everything else is discoverable from here, so nobody has
+# to memorise eleven bindings to get started.
+MENU='file|⇧O|find a file by name
+class|⇧C|find a file by class name
+grep|⇧F|search all code
+usages|⇧U|where is this variable used
+callers|⇧I|who calls this method
+def|⇧M|where is this defined
+recent|⇧E|files I opened recently
+tree|⇧V|browse the folder tree
+breakpoint|⇧B|set breakpoints in a file
+debug|⇧S|attach a debugger to a service
+debug-all|⇧A|attach a debugger to every service
+doctor||check my setup
+keys||print bindings for herdr config'
+
+cmd_menu() {
+    need fzf
+    local pick sub
+    pick=$(printf '%s\n' "$MENU" \
+        | awk -F'|' '{ printf "%-12s %-4s %s\n", $1, $2, $3 }' \
+        | "$FZF" --layout=reverse --info=inline --prompt='herdr-nav> ' \
+                 --header='type to filter, Enter to run') || exit 0
+    sub=$(printf '%s' "$pick" | awk '{print $1}')
+    [ -n "$sub" ] || exit 0
+    exec "$SELF" "$sub"
+}
+
 # --------------------------------------------------------------- install ----
 # Self-install, so getting started needs no `curl | sh`: you download this file,
 # read it if you like, then run it. Moves itself to a directory on your PATH.
@@ -699,7 +729,7 @@ cmd_keys() {
     printf '# SSH attach, eating the first press. Letters avoid herdr defaults.\n\n'
 
     # subcommand:letter:type:description
-    for want in file:o:popup:'go to file' class:c:popup:'go to class' grep:f:popup:'find in files' \
+    for want in menu:space:popup:'herdr-nav menu' file:o:popup:'go to file' class:c:popup:'go to class' grep:f:popup:'find in files' \
                 recent:e:popup:'recent files' tree:v:popup:'project tree' \
                 usages:u:popup:'find usages of an identifier' \
                 callers:i:popup:'find callers of a method' \
@@ -709,7 +739,9 @@ cmd_keys() {
         local sub=${want%%:*} rest=${want#*:}
         letter=${rest%%:*}; rest=${rest#*:}
         local kind=${rest%%:*} desc=${rest#*:}
+        # the menu is the one key you should not have to hold shift for
         local key="prefix+shift+$letter"
+        [ "$letter" = space ] && key="prefix+space"
         if printf '%s\n' "$taken" | grep -qxF "$key"; then
             free=""
             for alt in i m q y z a c e; do
@@ -720,8 +752,8 @@ cmd_keys() {
             [ -n "$free" ] && key="prefix+shift+$free" || { printf '# No free letter found; bind %s yourself.\n\n' "$sub"; continue; }
             taken=$(printf '%s\n%s\n' "$taken" "$key")
         fi
-        printf '# %s\n[[keys.command]]\nkey = "%s"\ntype = "%s"\ncommand = "%s %s"\n' \
-               "$desc" "$key" "$kind" "$self" "$sub"
+        printf '[[keys.command]]\nkey = "%s"\ntype = "%s"\ncommand = "%s %s"\ndescription = "%s"\n' \
+               "$key" "$kind" "$self" "$sub" "$desc"
         [ "$kind" = popup ] && printf 'width = "90%%"\nheight = "85%%"\n'
         printf '\n'
     done
@@ -740,6 +772,7 @@ case ${1:-} in
     def)                     need fzf bat rg; guard_root; cmd_def "${2:-}" ;;
     debug)                   guard_root; cmd_debug "${2:-}" ;;
     debug-all)               guard_root; cmd_debug_all ;;
+    menu)                    guard_root; cmd_menu ;;
     install)                 cmd_install ;;
     doctor)                  cmd_doctor ;;
     install-deps)            cmd_install_deps ;;

@@ -5,8 +5,13 @@ Find files, search code and debug Java inside [herdr](https://herdr.dev).
 A single shell script wiring `fzf`, `ripgrep` and `jdb` into herdr popups,
 scoped to the git worktree of the pane you are in.
 
+**One key to remember: `prefix+Space`.** It opens a menu of everything, filtered
+as you type. The shortcuts below are the same actions, once you know which you
+reach for.
+
 | | |
 |---|---|
+| `prefix+Space` | **menu — everything, searchable** |
 | `prefix+⇧O` | go to file |
 | `prefix+⇧C` | go to class |
 | `prefix+⇧F` | find in files |
@@ -18,6 +23,9 @@ scoped to the git worktree of the pane you are in.
 | `prefix+⇧B` | set breakpoints by browsing a file |
 | `prefix+⇧S` | attach `jdb` to a service |
 | `prefix+⇧A` | attach `jdb` to every service |
+
+herdr's own `prefix+?` lists them with descriptions, so there is nothing to
+memorise.
 
 ## Install
 
