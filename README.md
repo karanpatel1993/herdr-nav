@@ -83,19 +83,30 @@ Click to select and scroll with the wheel anywhere, including the preview.
 
 ## Debugging
 
-`prefix+⇧S` attaches `jdb` to a live service with your source tree on the
-sourcepath. `prefix+⇧A` opens a pane per service. `prefix+⇧B` turns lines you
-mark into `stop at` commands.
+Attach a Java debugger to a running service and read variables, without leaving
+herdr.
 
-For variables printed on every stop, put this in `~/.jdbrc`:
+1. `prefix+⇧S` — pick a running service. `jdb` attaches in a new pane.
+2. `prefix+⇧B` — pick a file, `Tab` the lines you want, `Enter`. The breakpoint
+   commands are typed into the debugger pane.
+3. Press `Enter` in that pane to arm them, then `cont` to run.
+
+| | |
+|---|---|
+| `prefix+⇧S` | attach to one service |
+| `prefix+⇧A` | attach to every running service, one pane each |
+| `prefix+⇧B` | pick a file and set breakpoints in it |
+
+To print the variables automatically every time a breakpoint hits, add this to
+`~/.jdbrc`:
 
 ```
 monitor where
 monitor locals
 ```
 
-The port picker warns when a service was built from a different worktree than
-your pane.
+If a service is running code built from a different worktree than your pane, the
+service list says so — otherwise your line numbers point at the wrong lines.
 
 ## Configuration
 
