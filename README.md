@@ -31,8 +31,16 @@ herdr-nav keys      # prints bindings — paste into ~/.config/herdr/config.toml
 herdr config check && herdr server reload-config
 ```
 
-Needs `fzf`, `fd`, `bat`, `ripgrep`. `doctor` prints the install command for your
-package manager; `herdr-nav install-deps` fetches static builds with no sudo.
+### Dependencies
+
+`fzf`, `fd`, `bat`, `ripgrep`. `doctor` lists any that are missing and prints the
+command to install them.
+
+If you cannot install packages on that machine:
+
+```sh
+herdr-nav install-deps    # downloads them into ~/.local/bin
+```
 
 ## Navigating
 
