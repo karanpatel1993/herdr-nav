@@ -600,9 +600,9 @@ cmd_install_deps() {
 MENU='file|⇧O|find a file by name
 class|⇧C|find a file by class name
 grep|⇧F|search all code
-usages|⇧U|where is this variable used
-callers|⇧I|who calls this method
-def|⇧M|where is this defined
+usages||where is this variable used
+callers||who calls this method
+def||where is this defined
 recent|⇧E|files I opened recently
 tree|⇧V|browse the folder tree
 breakpoint|⇧B|set breakpoints in a file
@@ -731,9 +731,6 @@ cmd_keys() {
     # subcommand:letter:type:description
     for want in menu:space:popup:'herdr-nav menu' file:o:popup:'go to file' class:c:popup:'go to class' grep:f:popup:'find in files' \
                 recent:e:popup:'recent files' tree:v:popup:'project tree' \
-                usages:u:popup:'find usages of an identifier' \
-                callers:i:popup:'find callers of a method' \
-                def:m:popup:'go to definition' \
                 breakpoint:b:popup:'browse file, set breakpoints' \
                 debug:s:pane:'attach jdb' debug-all:a:popup:'attach jdb to every service'; do
         local sub=${want%%:*} rest=${want#*:}

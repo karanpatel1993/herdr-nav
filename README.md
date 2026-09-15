@@ -15,14 +15,14 @@ reach for.
 | `prefix+⇧O` | go to file |
 | `prefix+⇧C` | go to class |
 | `prefix+⇧F` | find in files |
-| `prefix+⇧U` | find usages of a variable |
-| `prefix+⇧I` | find callers of a method |
-| `prefix+⇧M` | go to definition |
 | `prefix+⇧E` | recent files |
 | `prefix+⇧V` | project tree |
 | `prefix+⇧B` | set breakpoints by browsing a file |
 | `prefix+⇧S` | attach `jdb` to a service |
 | `prefix+⇧A` | attach `jdb` to every service |
+
+Finding usages, callers and definitions lives in the menu, and on `Ctrl+R` /
+`Ctrl+]` once a file is open — which is where you normally want them.
 
 herdr's own `prefix+?` lists them with descriptions, so there is nothing to
 memorise.
