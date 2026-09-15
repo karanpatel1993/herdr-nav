@@ -21,17 +21,36 @@ prefix+⇧V   project tree          prefix+⇧S   attach jdb to a service
 
 ## Install
 
-Needs `fzf`, `fd` (or `fdfind`), `bat` (or `batcat`), `ripgrep`.
-Optional: `lf` for the tree, a JDK for the debugger, `jq` for multi-service attach.
-
 ```sh
 curl -fsSL https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav \
   -o ~/.local/bin/herdr-nav && chmod +x ~/.local/bin/herdr-nav
 
-herdr-nav doctor    # check dependencies and see what it detected
+herdr-nav doctor    # what's installed, what's missing, how to get it
 herdr-nav keys      # prints bindings -- paste into ~/.config/herdr/config.toml
 herdr config check && herdr server reload-config
 ```
+
+### Dependencies
+
+Required: `fzf`, `fd` (or `fdfind`), `bat` (or `batcat`), `ripgrep`.
+Optional: `lf` for the tree, a JDK for the debugger, `jq` for multi-service attach.
+
+They are not vendored — they are widely packaged, and four binaries across four
+platforms would dwarf this script and go stale immediately. `herdr-nav doctor`
+detects your package manager and prints the exact command:
+
+```
+Install with your package manager:
+  sudo apt install fzf fd-find bat ripgrep      # optional: default-jdk jq
+```
+
+**No root?** `herdr-nav install-deps` fetches static builds straight into
+`~/.local/bin` — no sudo, no package manager. It skips anything already on your
+PATH and prints what it installed.
+
+Distro packages are new enough: every feature used here works on the `fzf 0.44.1`
+that Ubuntu 24.04 ships. Debian's `fdfind`/`batcat` renames are detected
+automatically, so no symlinks are needed.
 
 `herdr-nav keys` reads your existing config **and** herdr's built-in defaults,
 then reassigns any binding that would collide, telling you where it moved it.

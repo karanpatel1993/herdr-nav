@@ -4,7 +4,7 @@
 #   herdr-nav file | class | grep [query] | recent | tree
 #   herdr-nav breakpoint | lines <file> | bp <file>[:line]
 #   herdr-nav debug [port] | debug-all
-#   herdr-nav doctor | keys | version
+#   herdr-nav doctor | install-deps | keys | version
 #
 # Install: put this on PATH, then `herdr-nav keys` and paste what it prints
 # into ~/.config/herdr/config.toml.
@@ -488,6 +488,67 @@ $out"; exit 1; }
     printf 'attached %s service(s)\n\nprefix+z  zoom a pane fullscreen (and back)\nprefix+r  resize mode\nprefix+?  full key list\n' "$n"
 }
 
+# ---------------------------------------------------------------- deps ----
+# Dependencies are NOT vendored: they are widely packaged, and shipping four
+# binaries for four platforms would be larger than this script by two orders of
+# magnitude and stale the week after. Instead: name the exact command for the
+# platform we are on, and offer a sudo-free fetch for machines without root.
+pkg_hint() {
+    local mgr=""
+    for m in apt-get dnf pacman zypper apk brew port; do command -v "$m" >/dev/null 2>&1 && { mgr=$m; break; }; done
+    case $mgr in
+        apt-get) printf 'sudo apt install fzf fd-find bat ripgrep      # optional: default-jdk jq' ;;
+        dnf)     printf 'sudo dnf install fzf fd-find bat ripgrep      # optional: java-latest-openjdk jq' ;;
+        pacman)  printf 'sudo pacman -S fzf fd bat ripgrep             # optional: jdk-openjdk jq lf' ;;
+        zypper)  printf 'sudo zypper install fzf fd bat ripgrep        # optional: java-devel jq' ;;
+        apk)     printf 'sudo apk add fzf fd bat ripgrep               # optional: openjdk17 jq lf' ;;
+        brew)    printf 'brew install fzf fd bat ripgrep               # optional: openjdk jq lf' ;;
+        port)    printf 'sudo port install fzf fd bat ripgrep' ;;
+        *)       printf 'install fzf, fd, bat and ripgrep from your package manager' ;;
+    esac
+}
+
+# Static builds into ~/.local/bin. For machines where you have no root, or the
+# packaged versions are unavailable.
+cmd_install_deps() {
+    local bin=$HOME/.local/bin os arch tmp
+    mkdir -p "$bin"
+    case $(uname -s) in Darwin) os=darwin ;; Linux) os=linux ;; *) die "unsupported OS: $(uname -s)" ;; esac
+    case $(uname -m) in x86_64|amd64) arch=amd64 ;; arm64|aarch64) arch=arm64 ;; *) die "unsupported arch: $(uname -m)" ;; esac
+    tmp=$(mktemp -d)
+    # Expand now, not at exit: $tmp is function-local and gone by the time the
+    # trap fires, which under `set -u` aborts with "unbound variable".
+    trap "rm -rf '$tmp'" EXIT
+    printf 'Installing into %s (%s/%s)\n\n' "$bin" "$os" "$arch"
+
+    grab() {                       # repo, asset-regex, binary-name-inside
+        local repo=$1 re=$2 want=$3 url
+        command -v "$want" >/dev/null 2>&1 && { printf '  %-10s already on PATH, skipping\n' "$want"; return; }
+        url=$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
+              | grep -oE '"browser_download_url": *"[^"]+"' | cut -d'"' -f4 | grep -E "$re" | head -1)
+        [ -n "$url" ] || { printf '  %-10s no matching asset for %s/%s\n' "$want" "$os" "$arch"; return 1; }
+        curl -fsSL "$url" -o "$tmp/a.tar.gz" || { printf '  %-10s download failed\n' "$want"; return 1; }
+        tar xzf "$tmp/a.tar.gz" -C "$tmp" 2>/dev/null || { printf '  %-10s extract failed\n' "$want"; return 1; }
+        local f; f=$(find "$tmp" -type f -name "$want" -perm -u+x | head -1)
+        [ -n "$f" ] || { printf '  %-10s binary not found in archive\n' "$want"; return 1; }
+        install -m755 "$f" "$bin/$want" && printf '  %-10s %s\n' "$want" "$("$bin/$want" --version 2>&1 | head -1)"
+        rm -f "$tmp/a.tar.gz"
+    }
+
+    local fzfarch=$arch rsarch mus
+    [ "$arch" = amd64 ] && rsarch=x86_64 || rsarch=aarch64
+    [ "$os" = darwin ] && mus="apple-darwin" || mus="unknown-linux-musl"
+    grab junegunn/fzf   "${os}_${fzfarch}\.tar\.gz$"        fzf
+    grab sharkdp/fd     "${rsarch}-${mus}\.tar\.gz$"        fd
+    grab sharkdp/bat    "${rsarch}-${mus}\.tar\.gz$"        bat
+    grab BurntSushi/ripgrep "${rsarch}-${mus}\.tar\.gz$"    rg
+    grab gokcehan/lf    "lf-${os}-${arch}\.tar\.gz$"        lf
+
+    printf '\n'
+    case ":$PATH:" in *":$bin:"*) ;; *) printf 'NOTE: %s is not on your PATH.\n' "$bin" ;; esac
+    printf 'Now run: herdr-nav doctor\n'
+}
+
 # --------------------------------------------------------------- doctor ----
 cmd_doctor() {
     local ok=0
@@ -511,7 +572,12 @@ cmd_doctor() {
     printf '  open action  %s\n' "$OPEN_ACTION"
     printf '  config       %s%s\n' "$CONF" "$([ -r "$CONF" ] || printf ' (not created)')"
     printf '  debug ports  %s\n' "${DEBUG_PORTS:-(none configured - every listening port is offered)}"
-    [ $ok -eq 0 ] && printf '\nall required tools present\n' || printf '\nInstall what is missing, then re-run.\n'
+    if [ $ok -eq 0 ]; then
+        printf '\nall required tools present\n'
+    else
+        printf '\nInstall with your package manager:\n  %s\n' "$(pkg_hint)"
+        printf '\nNo root? Fetch static builds into ~/.local/bin instead:\n  herdr-nav install-deps\n'
+    fi
     return $ok
 }
 
@@ -584,6 +650,7 @@ case ${1:-} in
     debug)                   guard_root; cmd_debug "${2:-}" ;;
     debug-all)               guard_root; cmd_debug_all ;;
     doctor)                  cmd_doctor ;;
+    install-deps)            cmd_install_deps ;;
     keys)                    cmd_keys ;;
     version|--version|-v)    printf 'herdr-nav %s\n' "$VERSION" ;;
     ''|help|--help|-h)
