@@ -4,7 +4,7 @@
 #   herdr-nav file | class | grep [query] | recent | tree
 #   herdr-nav breakpoint | lines <file> | bp <file>[:line]
 #   herdr-nav debug [port] | debug-all
-#   herdr-nav doctor | install-deps | keys | version
+#   herdr-nav install | doctor | install-deps | keys | version
 #
 # Install: put this on PATH, then `herdr-nav keys` and paste what it prints
 # into ~/.config/herdr/config.toml.
@@ -592,6 +592,48 @@ cmd_install_deps() {
     printf 'Now run: herdr-nav doctor\n'
 }
 
+# --------------------------------------------------------------- install ----
+# Self-install, so getting started needs no `curl | sh`: you download this file,
+# read it if you like, then run it. Moves itself to a directory on your PATH.
+cmd_install() {
+    local dest d src
+    src=$SELF
+    [ -f "$src" ] || die "cannot locate myself ($src)"
+
+    if [ -n "${HERDR_NAV_BIN:-}" ]; then
+        dest=$HERDR_NAV_BIN
+    else
+        dest=""
+        for d in "$HOME/.local/bin" "$HOME/bin"; do
+            case ":$PATH:" in *":$d:"*) [ -d "$d" ] && { dest=$d; break; } ;; esac
+        done
+        [ -n "$dest" ] || dest=$HOME/.local/bin
+    fi
+    mkdir -p "$dest" || die "cannot create $dest"
+
+    if [ "$src" = "$dest/herdr-nav" ]; then
+        printf 'Already installed at %s\n' "$src"
+    else
+        cp "$src" "$dest/herdr-nav.tmp" && chmod +x "$dest/herdr-nav.tmp" \
+            && mv "$dest/herdr-nav.tmp" "$dest/herdr-nav" \
+            || die "could not write to $dest"
+        printf 'Installed to %s/herdr-nav\n' "$dest"
+    fi
+
+    case ":$PATH:" in
+        *":$dest:"*) ;;
+        *)  local sh_name rc
+            sh_name=${SHELL:-}; sh_name=${sh_name##*/}
+            case "$sh_name" in
+                zsh)  rc=~/.zshrc ;; bash) rc=~/.bashrc ;;
+                fish) rc=~/.config/fish/config.fish ;; *) rc="your shell rc" ;;
+            esac
+            printf '\n%s is not on your PATH. Add it:\n  echo '"'"'export PATH="%s:$PATH"'"'"' >> %s\n' \
+                   "$dest" "$dest" "$rc" ;;
+    esac
+    printf '\nNext:\n  herdr-nav doctor    # check dependencies\n  herdr-nav keys      # bindings for ~/.config/herdr/config.toml\n'
+}
+
 # --------------------------------------------------------------- doctor ----
 cmd_doctor() {
     local ok=0
@@ -697,6 +739,7 @@ case ${1:-} in
     def)                     need fzf bat rg; guard_root; cmd_def "${2:-}" ;;
     debug)                   guard_root; cmd_debug "${2:-}" ;;
     debug-all)               guard_root; cmd_debug_all ;;
+    install)                 cmd_install ;;
     doctor)                  cmd_doctor ;;
     install-deps)            cmd_install_deps ;;
     keys)                    cmd_keys ;;

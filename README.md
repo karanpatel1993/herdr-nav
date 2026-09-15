@@ -23,8 +23,14 @@ scoped automatically to the git worktree of the pane you are in.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/install.sh | sh
+curl -fsSLO https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav
+chmod +x herdr-nav
+./herdr-nav install
 ```
+
+No `curl | sh` — you download one file, read it if you want, then run it. It
+moves itself to a directory already on your `PATH` (or `~/.local/bin`, telling
+you how to add it). Override with `HERDR_NAV_BIN=`.
 
 Then:
 
@@ -33,14 +39,6 @@ herdr-nav doctor    # what's missing and how to get it
 herdr-nav keys      # prints bindings — paste into ~/.config/herdr/config.toml
 herdr config check && herdr server reload-config
 ```
-
-The installer picks a directory already on your `PATH`, or falls back to
-`~/.local/bin` and tells you how to add it. Override with `HERDR_NAV_BIN=`.
-Prefer to do it by hand? The script is one file — download it anywhere and
-`chmod +x`.
-
-`herdr-nav keys` skips any key you already use and tells you where it moved
-things. It prints; you paste. It never edits your config.
 
 Needs `fzf`, `fd`, `bat`, `ripgrep`. `doctor` prints the install command for your
 package manager, or `herdr-nav install-deps` fetches static builds into
