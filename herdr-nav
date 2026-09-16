@@ -479,10 +479,12 @@ cmd_lines() {
     [ -f "$file" ] || { pause "no such file: $file"; return 1; }
     # Loop rather than exit: after a jump you land back here, ready to jump again.
     while true; do
-    out=$(awk '{ printf "%6d  %s\n", NR, $0 }' "$file" \
-        | "$FZF" --prompt="$(basename "$file") line> " --layout=reverse --no-sort --multi \
+    # bat, not awk: the list itself gets syntax colouring, and fzf --ansi hands
+    # back the plain text, so the line number still parses as field 1.
+    out=$("$BAT" --color=always --style=numbers --paging=never "$file" 2>/dev/null \
+        | "$FZF" --ansi --prompt="$(basename "$file") line> " --layout=reverse --no-sort --multi \
                  --header="$(basename \"$file\")   Tab: mark   Enter: breakpoint   ^R: callers/usages   ^]: definition   ^P: path   Esc: back" \
-                 --expect=ctrl-v,ctrl-p,alt-u,ctrl-r,ctrl-] --delimiter='  +' --nth=2.. \
+                 --expect=ctrl-v,ctrl-p,alt-u,ctrl-r,ctrl-] --delimiter=' +' --nth='3..' \
                  --preview "$BAT --color=always --style=numbers --highlight-line {1} '$file'" \
                  --preview-window "right,60%,border-left,+{1}+3/3,~0" \
                  --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview') || return 0
