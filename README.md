@@ -68,9 +68,10 @@ want to change.
 curl -fsSLO https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/install.sh
 less install.sh && sh install.sh
 
-# just the script, dependencies from your package manager
+# just the script
 curl -fsSLO https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav
 chmod +x herdr-nav && ./herdr-nav install
+herdr-nav install-deps      # or install fzf/fd/bat/ripgrep/ast-grep yourself
 ```
 
 `HERDR_NAV_BIN=/somewhere` installs elsewhere; `HERDR_NAV_NO_DEPS=1` skips
