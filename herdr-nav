@@ -623,10 +623,19 @@ cmd_install_deps() {
         curl -fsSL "$url" -o "$arc" || { printf '  %-10s download failed\n' "$want"; return 1; }
         case $arc in
             *.zip)
-                if command -v unzip >/dev/null 2>&1; then unzip -oq "$arc" -d "$tmp"
+                # Whichever of these the machine already has. bsdtar reads zips,
+                # and on macOS `tar` IS bsdtar; `jar` ships with any JDK.
+                if   command -v unzip  >/dev/null 2>&1; then unzip -oq "$arc" -d "$tmp"
                 elif command -v python3 >/dev/null 2>&1; then
                     python3 -c "import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$arc" "$tmp"
-                else printf '  %-10s needs unzip or python3 for .zip\n' "$want"; return 1; fi ;;
+                elif command -v bsdtar >/dev/null 2>&1; then bsdtar xf "$arc" -C "$tmp"
+                elif tar xf "$arc" -C "$tmp" 2>/dev/null; then :
+                elif command -v jar >/dev/null 2>&1; then ( cd "$tmp" && jar xf "$arc" )
+                else
+                    printf '  %-10s skipped: no zip extractor found\n' "$want"
+                    printf '             install one of unzip / python3, then: herdr-nav install-deps\n'
+                    return 1
+                fi ;;
             *)  tar xzf "$arc" -C "$tmp" 2>/dev/null ;;
         esac || { printf '  %-10s extract failed\n' "$want"; return 1; }
         # not -perm -u+x: python's zipfile extraction drops the executable bit
