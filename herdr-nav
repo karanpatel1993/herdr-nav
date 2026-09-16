@@ -7,6 +7,7 @@
 #   herdr-nav menu        # one key, everything else is in here
 #   herdr-nav setup       # write the herdr keybindings
 #   herdr-nav setkey <action> <key>   # change one, then re-apply
+#   herdr-nav uninstall [--yes]       # remove bindings, config, state, script
 #   herdr-nav install | doctor | install-deps | keys | version
 #
 # Install: put this on PATH, then `herdr-nav keys` and paste what it prints
@@ -787,6 +788,53 @@ cmd_setkey() {
     HERDR_NAV_KEYS="$rest" cmd_setup
 }
 
+# ------------------------------------------------------------ uninstall ----
+# Removes what herdr-nav put on the machine: its keybindings, its config, its
+# state, and the script. Deliberately NOT the search tools -- fzf, ripgrep and
+# friends are general-purpose and something else probably uses them.
+cmd_uninstall() {
+    local cfg ans had=0
+    cfg=${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}
+
+    printf 'This will remove:\n'
+    if [ -f "$cfg" ] && grep -qF "$MARK_BEGIN" "$cfg"; then
+        printf '  keybindings  %s (the herdr-nav block only)\n' "$cfg"; had=1
+    fi
+    [ -d "$CONF_DIR" ] && { printf '  config       %s\n' "$CONF_DIR"; had=1; }
+    [ -d "$STATE" ]    && { printf '  state        %s\n' "$STATE"; had=1; }
+    [ -f "$SELF" ]     && { printf '  script       %s\n' "$SELF"; had=1; }
+    [ "$had" = 1 ] || { printf '  (nothing found)\n'; return 0; }
+
+    printf '\nKept: fzf, fd, bat, ripgrep, ast-grep, lf -- other tools may use them.\n'
+    printf 'Also kept: any %s.bak.* backups.\n\n' "$(basename "$cfg")"
+
+    if [ "${1:-}" != --yes ] && [ "${1:-}" != -y ]; then
+        printf 'Proceed? [y/N] '
+        # prefer the terminal so a piped stdin cannot answer for you; with no
+        # terminal at all, decline rather than delete
+        # the node can exist yet fail to open (containers, cron), so try it
+        if { : < /dev/tty; } 2>/dev/null; then read -r ans < /dev/tty || ans=n
+        elif [ -t 0 ];                  then read -r ans || ans=n
+        else ans=n; printf '\n(no terminal to confirm on -- re-run with --yes)\n'
+        fi
+        case $ans in y|Y|yes|YES) ;; *) printf 'Cancelled.\n'; return 1 ;; esac
+    fi
+
+    if [ -f "$cfg" ] && grep -qF "$MARK_BEGIN" "$cfg"; then
+        cp "$cfg" "$cfg.bak.$(date +%Y%m%d-%H%M%S)"
+        awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+            $0 == b { skip = 1; next }
+            $0 == e { skip = 0; next }
+            !skip   { print }' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+        printf 'Removed keybindings from %s\n' "$cfg"
+        [ -n "$HERDR" ] && "$HERDR" server reload-config >/dev/null 2>&1 && printf 'Reloaded herdr.\n'
+    fi
+    rm -rf "$CONF_DIR" "$STATE"
+    printf 'Removed config and state.\n'
+    # last: the script is what is currently executing
+    rm -f "$SELF" && printf 'Removed %s\n\nUninstalled.\n' "$SELF"
+}
+
 # ---------------------------------------------------------------- setup ----
 # Writes the bindings into herdr's config between fenced markers, so re-running
 # replaces the previous block instead of appending a duplicate. Validates before
@@ -969,6 +1017,7 @@ case ${1:-} in
     install-deps)            cmd_install_deps ;;
     keys)                    cmd_keys "${2:-}" ;;
     setup)                   cmd_setup ;;
+    uninstall)               cmd_uninstall "${2:-}" ;;
     setkey)                  cmd_setkey "${2:-}" "${3:-}" ;;
     version|--version|-v)    printf 'herdr-nav %s\n' "$VERSION" ;;
     ''|help|--help|-h)

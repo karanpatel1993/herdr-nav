@@ -60,6 +60,17 @@ want to change.
 
 `herdr-nav doctor` verifies everything at any point.
 
+### Uninstall
+
+```sh
+herdr-nav uninstall
+```
+
+Removes the keybindings from your herdr config, the herdr-nav config and state,
+and the script. It lists what it will delete and asks first; `--yes` skips the
+prompt. Your other herdr bindings, your config backups, and the search tools
+(`fzf`, `ripgrep`, …) are left alone.
+
 <details>
 <summary>Other ways to install</summary>
 
