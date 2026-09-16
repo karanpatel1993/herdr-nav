@@ -24,6 +24,10 @@ HERDR_NAV_DEBUG_PORTS=""
 # HERDR_NAV_MIN_QUERY=3      # ignore queries shorter than this
 # HERDR_NAV_MAX_HITS=20000   # cap lines handed to fzf
 
+# Change a keybinding, then re-run `herdr-nav setup`. Anything not listed keeps
+# its default. Actions: menu file class grep recent tree breakpoint debug debug-all
+# HERDR_NAV_KEYS="grep=prefix+slash file=prefix+shift+g"
+
 # Override tool discovery only if they are somewhere unusual.
 # HERDR_NAV_FZF=/opt/bin/fzf
 # HERDR_NAV_FD=/opt/bin/fd
