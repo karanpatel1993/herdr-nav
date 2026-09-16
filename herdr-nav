@@ -782,7 +782,9 @@ Run 'herdr config check' to see why."
     fi
 
     printf 'Added %s bindings to %s\n\n' "$(grep -c '^key = ' "$gen")" "$cfg"
-    HERDR_CONFIG_PATH="$tmp" cmd_keys
+    # read back what was actually written; re-running cmd_keys here would see
+    # the new block as "taken" and print a different, wrong set of keys
+    awk -F'"' '/^key = /{k=$2} /^description = /{printf "  %-20s  %s\n", k, $2}' "$gen"
     printf '\nBackup: %s\n' "$backup"
     if [ -n "$HERDR" ] && "$HERDR" server reload-config >/dev/null 2>&1; then
         printf 'Reloaded. Press prefix+Space to start.\n'
