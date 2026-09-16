@@ -58,6 +58,9 @@ It records the choice and re-applies everything in one step. `herdr-nav keys`
 lists the action name next to every binding, so you can read off the one you
 want to change.
 
+`herdr-nav help` is the full manual — every key, the debugging flow, and the
+`jdb` commands. It is also in the menu, so `prefix+Space` → `help` works mid-task.
+
 `herdr-nav doctor` verifies everything at any point.
 
 ### Uninstall

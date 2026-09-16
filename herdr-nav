@@ -684,6 +684,81 @@ cmd_install_deps() {
     printf 'Now run: herdr-nav doctor\n'
 }
 
+# ----------------------------------------------------------------- help ----
+cmd_help() {
+    # in a popup the pane closes the moment this exits, so page it when we are
+    # on a terminal and let it stream when piped
+    if [ -t 1 ] && [ -n "${PAGER_BIN:-}" ]; then _help_text | "$PAGER_BIN" -R; else _help_text; fi
+}
+_help_text() {
+cat <<'HELPTEXT'
+herdr-nav — find files, search code and debug Java inside herdr.
+
+OPENING A SEARCH            (prefix is herdr's own, ctrl+b by default)
+  prefix+Space    menu — every action, searchable. Start here if unsure.
+  prefix+⇧O       go to file          prefix+⇧V   project tree
+  prefix+⇧C       go to class         prefix+⇧B   set breakpoints in a file
+  prefix+⇧F       find in files       prefix+⇧S   attach a debugger
+  prefix+⇧E       recent files        prefix+⇧A   attach to every service
+
+IN A LIST OF RESULTS
+  Enter           open the file, at that line
+  Ctrl+P          send path:line to the pane you came from
+  Ctrl+T          set a breakpoint there
+  Ctrl+V          view the file
+  Alt+W / Alt+X   resize / hide the preview
+  Esc             back one step
+  the mouse works: click to select, scroll the list or the preview
+
+IN AN OPEN FILE
+  Ctrl+R          callers of a method, or usages of a variable, on this line
+                  (it picks which from the line — you choose the identifier)
+  Ctrl+]          where that identifier is defined
+  Tab             mark a line; mark several, then Enter sets them all
+  Enter           set a breakpoint on the marked lines
+  Ctrl+P          send path:line to your pane
+  Esc             back one step
+
+  Enter descends, Esc climbs back — that is how you follow a call chain.
+
+DEBUGGING
+  1. prefix+⇧S    pick a running service; jdb attaches in a new pane
+  2. prefix+⇧B    pick a file, Tab the lines you want, Enter
+                  the stop-at commands are typed into the debugger pane
+  3. press Enter there to arm them, then cont
+
+  At the jdb prompt:
+    cont            resume until the next breakpoint
+    locals          variables in the current frame
+    where           the call stack
+    up / down       move a frame, then locals again
+    print <expr>    evaluate something
+    step / next     step into / over
+    clear           list breakpoints;  clear <class>:<line> removes one
+    quit            detach
+
+  Put this in ~/.jdbrc to print variables automatically on every stop:
+    monitor where
+    monitor locals
+
+  The service list warns when a service is running code built from a different
+  worktree than your pane — line numbers would otherwise point at the wrong lines.
+
+COMMANDS
+  herdr-nav setup                 add the keybindings to herdr and reload
+  herdr-nav keys                  show the bindings
+  herdr-nav setkey <action> <key> change one, then re-apply
+  herdr-nav doctor                what is installed, and which search engine
+  herdr-nav install-deps          fetch fzf/fd/bat/ripgrep/ast-grep
+  herdr-nav uninstall             remove bindings, config, state and the script
+
+LIMITS
+  Search is syntax-aware, not type-aware: it cannot tell your `status` from
+  another class's `status`, overloads look alike, and reflection, Lombok and
+  code inside jars are invisible. No results means "not found", not "unused".
+HELPTEXT
+}
+
 # ----------------------------------------------------------------- menu ----
 # One key to remember. Everything else is discoverable from here, so nobody has
 # to memorise eleven bindings to get started.
@@ -698,6 +773,7 @@ tree|⇧V|browse the folder tree
 breakpoint|⇧B|set breakpoints in a file
 debug|⇧S|attach a debugger to a service
 debug-all|⇧A|attach a debugger to every service
+help||how to use all of this
 doctor||check my setup
 keys||print bindings for herdr config'
 
@@ -1020,7 +1096,7 @@ case ${1:-} in
     uninstall)               cmd_uninstall "${2:-}" ;;
     setkey)                  cmd_setkey "${2:-}" "${3:-}" ;;
     version|--version|-v)    printf 'herdr-nav %s\n' "$VERSION" ;;
-    ''|help|--help|-h)
-        sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;
+    help|--help|-h)          cmd_help ;;
+    '')                      cmd_help | head -12 ;;
     *) die "unknown command: $1  (try: herdr-nav help)" ;;
 esac
