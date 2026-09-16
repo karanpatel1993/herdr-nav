@@ -616,8 +616,22 @@ cmd_install_deps() {
     grab() {                       # repo, asset-regex, binary-name-inside
         local repo=$1 re=$2 want=$3 url
         command -v "$want" >/dev/null 2>&1 && { printf '  %-10s already on PATH, skipping\n' "$want"; return; }
-        url=$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
-              | grep -oE '"browser_download_url": *"[^"]+"' | cut -d'"' -f4 | grep -E "$re" | head -1)
+        local api rc
+        api=$(curl -sS -w '\n%{http_code}' \
+              ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+              "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null)
+        rc=${api##*$'\n'}; api=${api%$'\n'*}
+        case $rc in
+            200) ;;
+            403|429)
+                # 60 requests/hour unauthenticated, shared per IP — a corporate
+                # NAT can exhaust it without you doing anything.
+                printf '  %-10s GitHub API rate limit reached. Retry later, or set\n' "$want"
+                printf '             GITHUB_TOKEN and re-run: herdr-nav install-deps\n'
+                return 1 ;;
+            *)  printf '  %-10s GitHub API returned HTTP %s\n' "$want" "$rc"; return 1 ;;
+        esac
+        url=$(printf '%s' "$api" | grep -oE '"browser_download_url": *"[^"]+"' | cut -d'"' -f4 | grep -E "$re" | head -1)
         [ -n "$url" ] || { printf '  %-10s no matching asset for %s/%s\n' "$want" "$os" "$arch"; return 1; }
         local arc="$tmp/a.${url##*.}"
         curl -fsSL "$url" -o "$arc" || { printf '  %-10s download failed\n' "$want"; return 1; }
