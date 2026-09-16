@@ -40,6 +40,11 @@ BAT=${HERDR_NAV_BAT:-$(resolve bat batcat)}
 LF=${HERDR_NAV_LF:-$(resolve lf)}
 JDB=${HERDR_NAV_JDB:-$(resolve jdb)}
 JQ=$(resolve jq)
+AG=${HERDR_NAV_AST_GREP:-$(resolve ast-grep)}
+# `sg` is shadow-utils on most distros; take it only if it really is ast-grep.
+if [ -z "$AG" ] && command -v sg >/dev/null 2>&1; then
+    sg --version 2>/dev/null | grep -qi 'ast-grep' && AG=$(command -v sg)
+fi
 HERDR=${HERDR_BIN_PATH:-$(resolve herdr)}
 PAGER_BIN=$(resolve less more)
 
@@ -267,9 +272,13 @@ cmd_usages() {
         name=$(printf '%s' "$name" | tr -d '[:space:]')
     fi
     [ -n "$name" ] || exit 0
-    hits=$("$RG" --column --line-number --no-heading --color=always --word-regexp \
-                 --hidden --follow --glob '!.git' --max-columns 400 \
-                 -- "$name" ${scope:+"$scope"} 2>/dev/null | head -n "$MAX_HITS")
+    if ag_usable && ag_java "${scope:-}"; then
+        hits=$(ag_usages "$name" "${scope:-}" | head -n "$MAX_HITS")
+    else
+        hits=$("$RG" --column --line-number --no-heading --color=always --word-regexp \
+                     --hidden --follow --glob '!.git' --max-columns 400 \
+                     -- "$name" ${scope:+"$scope"} 2>/dev/null | head -n "$MAX_HITS")
+    fi
     [ -n "$hits" ] || { pause "No usages of '$name'${scope:+ in $(basename "$scope")}."; exit 0; }
     while true; do
     out=$(printf '%s\n' "$hits" \
@@ -298,6 +307,36 @@ cmd_usages() {
     done
 }
 
+# ast-grep parses Java rather than matching characters, so a name inside a
+# comment, a string, or an unrelated word cannot match. Used when it is
+# installed and the target is Java; otherwise the regex path below runs.
+ag_usable() { [ -n "$AG" ] && [ -x "$AG" ] && [ -n "$JQ" ]; }
+ag_java()   { case ${1:-x.java} in *.java|*.kt) return 0 ;; *) [ -z "${1:-}" ] && return 0 || return 1 ;; esac; }
+
+ag_emit() {  # ast-grep args -> path:line:col:text
+    "$AG" "$@" --json=compact 2>/dev/null \
+      | "$JQ" -r '.[] | "\(.file):\(.range.start.line + 1):\(.range.start.column + 1):\(.lines | split("\n")[0])"'
+}
+ag_callers() {   # bare call and qualified call are different nodes; both needed
+    { ag_emit run -p "$1(\$\$\$A)"    -l java ${2:+"$2"}
+      ag_emit run -p "\$O.$1(\$\$\$A)" -l java ${2:+"$2"}
+    } | sort -u -t: -k1,1 -k2,2n
+}
+ag_usages() { ag_emit run -p "$1" -l java ${2:+"$2"}; }
+ag_def() {
+    ag_emit scan --inline-rules "id: herdr_nav_def
+language: java
+rule:
+  any:
+    - {kind: method_declaration}
+    - {kind: class_declaration}
+    - {kind: interface_declaration}
+    - {kind: enum_declaration}
+    - {kind: record_declaration}
+  has: {field: name, regex: \"^$1\$\"}
+severity: info" ${2:+"$2"}
+}
+
 # A Java declaration puts a modifier or a return type immediately before the
 # name; a call site does not. Good enough to split "who calls this" from "where
 # is it defined" without a compiler.
@@ -317,10 +356,14 @@ cmd_callers() {
     decl=$(decl_re "$name")
     # Callers are a code question, so exclude docs and other prose -- a method
     # name quoted in a markdown file is not a call site.
-    hits=$("$RG" --column --line-number --no-heading --color=always --hidden --follow \
-                 --glob '!.git' --glob '!*.md' --glob '!*.txt' --glob '!*.json' \
-                 --max-columns 400 -e "[^A-Za-z0-9_]${name}\\s*\\(" ${scope:+"$scope"} 2>/dev/null \
-           | "$RG" -v -e "$decl" 2>/dev/null | head -n "$MAX_HITS")
+    if ag_usable && ag_java "${scope:-}"; then
+        hits=$(ag_callers "$name" "${scope:-}" | head -n "$MAX_HITS")
+    else
+        hits=$("$RG" --column --line-number --no-heading --color=always --hidden --follow \
+                     --glob '!.git' --glob '!*.md' --glob '!*.txt' --glob '!*.json' \
+                     --max-columns 400 -e "[^A-Za-z0-9_]${name}\\s*\\(" ${scope:+"$scope"} 2>/dev/null \
+               | "$RG" -v -e "$decl" 2>/dev/null | head -n "$MAX_HITS")
+    fi
     if [ -z "$hits" ]; then
         pause "No callers of '$name'.
 It may be unused, called only via reflection or an interface, or the name is
@@ -367,9 +410,13 @@ cmd_def() {
     [ -n "$name" ] || exit 0
     pat="\\b(class|interface|enum|record|@interface)\\s+${name}\\b|$(decl_re "$name")"
     pat="$pat|\\b(private|public|protected|static|final)[A-Za-z0-9_<>\\[\\], ]*\\s${name}\\s*(=|;)"
-    hits=$("$RG" --column --line-number --no-heading --color=always --hidden --follow \
-                 --glob '!.git' --glob '!*.md' --glob '!*.txt' --max-columns 400 \
-                 -e "$pat" 2>/dev/null | head -n "$MAX_HITS")
+    if ag_usable; then
+        hits=$(ag_def "$name" | head -n "$MAX_HITS")
+    else
+        hits=$("$RG" --column --line-number --no-heading --color=always --hidden --follow \
+                     --glob '!.git' --glob '!*.md' --glob '!*.txt' --max-columns 400 \
+                     -e "$pat" 2>/dev/null | head -n "$MAX_HITS")
+    fi
     if [ -z "$hits" ]; then
         pause "No definition found for '$name'.
 It may be inherited, generated (Lombok), declared in a dependency jar, or
@@ -583,6 +630,7 @@ cmd_install_deps() {
     local fzfarch=$arch rsarch mus
     [ "$arch" = amd64 ] && rsarch=x86_64 || rsarch=aarch64
     [ "$os" = darwin ] && mus="apple-darwin" || mus="unknown-linux-musl"
+    [ "$os" = darwin ] && mus2="apple-darwin" || mus2="unknown-linux-gnu"
     grab junegunn/fzf   "${os}_${fzfarch}\.tar\.gz$"        fzf
     grab sharkdp/fd     "${rsarch}-${mus}\.tar\.gz$"        fd
     grab sharkdp/bat    "${rsarch}-${mus}\.tar\.gz$"        bat
@@ -676,11 +724,13 @@ cmd_doctor() {
     done
     printf '\noptional\n'
     local anymissing=0
-    for pair in "lf:$LF" "jdb:$JDB" "jq:$JQ" "herdr:$HERDR"; do
+    for pair in "ast-grep:$AG" "lf:$LF" "jdb:$JDB" "jq:$JQ" "herdr:$HERDR"; do
         if [ -n "${pair#*:}" ]; then printf '  %-6s %s\n' "${pair%%:*}" "${pair#*:}"
         else printf '  %-6s -\n' "${pair%%:*}"; anymissing=1; fi
     done
-    [ $anymissing -eq 1 ] && printf '  (tree needs lf; debug needs jdb; debug-all needs jq + herdr)\n'
+    [ $anymissing -eq 1 ] && printf '  (ast-grep+jq = syntax-aware search; lf = tree; jdb = debugger)\n'
+    if ag_usable; then printf '  search engine: ast-grep (parses Java)\n'
+    else printf '  search engine: ripgrep (text only - install ast-grep and jq for accuracy)\n'; fi
     printf '\nplatform\n'
     printf '  detected     %s (%s)\n' "$PLATFORM" "$(uname -s)"
     printf '  port lookup  %s %s\n' "$PLATFORM_TOOL" \

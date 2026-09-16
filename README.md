@@ -143,9 +143,14 @@ Optional, `~/.config/herdr-nav/config` — see [`config.example`](config.example
 
 ## Limits
 
-Search is text, not semantics. It cannot tell your `status` from another class's
-`status`; overloads look alike; interface dispatch, reflection, Lombok and jar
-code are invisible. **Zero results means "not found textually", not "dead code".**
+With `ast-grep` installed, Java search parses the code — a name inside a comment,
+a string, or an unrelated word cannot match. Without it, the same searches fall
+back to regex and are noisier. `doctor` says which engine is active.
+
+Either way it is **syntax-aware, not type-aware**: it cannot tell your `status`
+from another class's `status`, overloads look alike, and interface dispatch,
+reflection, Lombok and jar code are invisible. **Zero results means "not found",
+not "dead code".**
 
 Scope a local variable to its file — repo-wide, a short name is mostly noise:
 

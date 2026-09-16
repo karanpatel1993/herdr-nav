@@ -63,6 +63,25 @@ millions of lines, which fzf then has to ingest.
 
 Hence `HERDR_NAV_MIN_QUERY` (default 3) and `HERDR_NAV_MAX_HITS` (default 20000).
 
+## Search engines
+
+With `ast-grep` and `jq` installed, Java searches run against a parsed syntax
+tree. Without them, they fall back to regex. Measured on a 55k-file monorepo:
+
+| query | ast-grep | regex |
+|---|---|---|
+| `usages uc` | 217 | 457 |
+| `def ProfileConsumer` | 1 | 2 |
+
+The regex extras are comments, string literals and unrelated words. ast-grep
+costs about 3s across the whole repo against ripgrep's 0.12s — fine for an
+on-demand query, which is why live `grep` still uses ripgrep.
+
+A bare call and a qualified call are different syntax nodes, so `callers` runs
+two patterns — `name($$$A)` and `$O.name($$$A)` — and merges them. Definitions
+use a rule matching node *kind* (`method_declaration`, `class_declaration`, …)
+plus the name, which is why they are exact.
+
 ## How callers and definitions are told apart
 
 A Java declaration puts a modifier or a return type immediately before the name;
