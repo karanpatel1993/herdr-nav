@@ -40,13 +40,19 @@ file tree. No admin rights, and nothing already on your `PATH` is touched.
 Then:
 
 ```sh
-herdr-nav setup     # adds the keybindings to herdr and reloads
+herdr-nav keys      # review the bindings it will add
+herdr-nav setup     # add them and reload
 ```
 
-`setup` writes the bindings into `~/.config/herdr/config.toml` between markers,
-backs the file up first, and skips any key you already use. Re-running replaces
-its own block rather than adding a second one. `herdr-nav keys` prints them
-instead, if you would rather paste by hand.
+`setup` writes them into `~/.config/herdr/config.toml` between markers, backs the
+file up first, and skips any key you already use. Re-running replaces its own
+block rather than adding a second one.
+
+To change a binding, put this in `~/.config/herdr-nav/config` and re-run `setup`:
+
+```sh
+HERDR_NAV_KEYS="grep=prefix+slash file=prefix+shift+g"
+```
 
 `herdr-nav doctor` verifies everything at any point.
 
