@@ -40,11 +40,15 @@ file tree. No admin rights, and nothing already on your `PATH` is touched.
 Then:
 
 ```sh
-herdr-nav keys      # prints bindings — paste into ~/.config/herdr/config.toml
-herdr config check && herdr server reload-config
+herdr-nav setup     # adds the keybindings to herdr and reloads
 ```
 
-`herdr-nav doctor` verifies the setup at any point.
+`setup` writes the bindings into `~/.config/herdr/config.toml` between markers,
+backs the file up first, and skips any key you already use. Re-running replaces
+its own block rather than adding a second one. `herdr-nav keys` prints them
+instead, if you would rather paste by hand.
+
+`herdr-nav doctor` verifies everything at any point.
 
 <details>
 <summary>Other ways to install</summary>

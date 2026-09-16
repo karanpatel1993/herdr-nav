@@ -56,5 +56,5 @@ case ":${PATH:-}:" in
 esac
 
 echo "Next:"
-echo "  herdr-nav keys      # bindings to paste into ~/.config/herdr/config.toml"
-echo "  herdr-nav doctor    # verify the setup"
+echo "  herdr-nav setup     # add the keybindings to herdr and reload"
+echo "  herdr-nav doctor    # verify everything"
