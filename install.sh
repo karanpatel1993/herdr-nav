@@ -55,6 +55,9 @@ case ":${PATH:-}:" in
         echo ;;
 esac
 
-echo "Next:"
-echo "  herdr-nav setup     # add the keybindings to herdr and reload"
-echo "  herdr-nav doctor    # verify everything"
+# Show what `setup` would add, so it can be reviewed (and changed) first.
+"$BIN/herdr-nav" keys 2>/dev/null || {
+    echo "Next:"
+    echo "  herdr-nav setup     # add the keybindings to herdr and reload"
+}
+echo "Check setup:   herdr-nav doctor"
