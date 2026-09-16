@@ -30,25 +30,38 @@ memorise.
 ## Install
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav
-chmod +x herdr-nav
-./herdr-nav install
+curl -fsSL https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/install.sh | sh
+```
 
-herdr-nav doctor    # what's missing and how to get it
+Installs herdr-nav and everything it needs — `fzf`, `fd`, `bat`, `ripgrep` — into
+`~/.local/bin`. No admin rights, nothing already on your `PATH` is touched.
+
+Then:
+
+```sh
 herdr-nav keys      # prints bindings — paste into ~/.config/herdr/config.toml
 herdr config check && herdr server reload-config
 ```
 
-### Dependencies
+`herdr-nav doctor` verifies the setup at any point.
 
-`fzf`, `fd`, `bat`, `ripgrep`. `doctor` lists any that are missing and prints the
-command to install them.
-
-If you cannot install packages on that machine:
+<details>
+<summary>Other ways to install</summary>
 
 ```sh
-herdr-nav install-deps    # downloads them into ~/.local/bin
+# read the installer first
+curl -fsSLO https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/install.sh
+less install.sh && sh install.sh
+
+# just the script, dependencies from your package manager
+curl -fsSLO https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav
+chmod +x herdr-nav && ./herdr-nav install
 ```
+
+`HERDR_NAV_BIN=/somewhere` installs elsewhere; `HERDR_NAV_NO_DEPS=1` skips
+dependencies.
+
+</details>
 
 ## Navigating
 
