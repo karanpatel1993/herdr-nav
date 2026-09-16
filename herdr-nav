@@ -6,6 +6,7 @@
 #   herdr-nav debug [port] | debug-all
 #   herdr-nav menu        # one key, everything else is in here
 #   herdr-nav setup       # write the herdr keybindings
+#   herdr-nav setkey <action> <key>   # change one, then re-apply
 #   herdr-nav install | doctor | install-deps | keys | version
 #
 # Install: put this on PATH, then `herdr-nav keys` and paste what it prints
@@ -747,6 +748,39 @@ cmd_install() {
     printf '\nNext:\n  herdr-nav doctor    # check dependencies\n  herdr-nav keys      # bindings for ~/.config/herdr/config.toml\n'
 }
 
+# --------------------------------------------------------------- setkey ----
+ACTIONS='menu file class grep recent tree breakpoint debug debug-all'
+
+# `herdr-nav setkey grep prefix+shift+g` -- records the choice and applies it,
+# so nobody has to know an environment variable exists.
+cmd_setkey() {
+    local action=${1:-} key=${2:-} found=0 a rest
+    if [ -z "$action" ] || [ -z "$key" ]; then
+        printf 'usage: herdr-nav setkey <action> <key>\n\n' >&2
+        printf 'actions: %s\n' "$ACTIONS" >&2
+        printf 'example: herdr-nav setkey grep prefix+shift+g\n' >&2
+        exit 2
+    fi
+    for a in $ACTIONS; do [ "$a" = "$action" ] && found=1; done
+    [ "$found" = 1 ] || die "unknown action '$action'. One of: $ACTIONS"
+    case $key in
+        prefix+*|ctrl+*|alt+*|shift+*|f[0-9]*) ;;
+        *) die "'$key' does not look like a herdr key (try prefix+shift+g)" ;;
+    esac
+
+    mkdir -p "$CONF_DIR"
+    [ -f "$CONF" ] || : > "$CONF"
+    # rebuild HERDR_NAV_KEYS with this action replaced
+    rest=$(printf '%s' "${HERDR_NAV_KEYS:-}" | tr ' ' '\n' | grep -v "^${action}=" | tr '\n' ' ')
+    rest=$(printf '%s %s=%s' "$rest" "$action" "$key" | sed 's/^ *//; s/  */ /g')
+    grep -v '^HERDR_NAV_KEYS=' "$CONF" > "$CONF.tmp" 2>/dev/null || : > "$CONF.tmp"
+    printf 'HERDR_NAV_KEYS="%s"\n' "$rest" >> "$CONF.tmp"
+    mv "$CONF.tmp" "$CONF"
+
+    printf '%s is now %s\n\n' "$action" "$key"
+    HERDR_NAV_KEYS="$rest" cmd_setup
+}
+
 # ---------------------------------------------------------------- setup ----
 # Writes the bindings into herdr's config between fenced markers, so re-running
 # replaces the previous block instead of appending a duplicate. Validates before
@@ -901,10 +935,10 @@ cmd_keys() {   # $1: --toml for config blocks, otherwise a readable table
 
     [ "$mode" = --toml ] && printf '%s\n' "$MARK_END"
     [ "$mode" = table ] && printf '
-Add them:      herdr-nav setup
-Change one:    put this in %s, then re-run setup
-               HERDR_NAV_KEYS="grep=prefix+slash file=prefix+shift+g"
-' "$CONF"
+Add these:     herdr-nav setup
+Change one:    herdr-nav setkey grep prefix+shift+g
+Actions:       %s
+' "$ACTIONS"
     return 0
 }
 
@@ -926,6 +960,7 @@ case ${1:-} in
     install-deps)            cmd_install_deps ;;
     keys)                    cmd_keys "${2:-}" ;;
     setup)                   cmd_setup ;;
+    setkey)                  cmd_setkey "${2:-}" "${3:-}" ;;
     version|--version|-v)    printf 'herdr-nav %s\n' "$VERSION" ;;
     ''|help|--help|-h)
         sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;

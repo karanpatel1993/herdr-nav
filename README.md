@@ -48,11 +48,14 @@ herdr-nav setup     # add them and reload
 file up first, and skips any key you already use. Re-running replaces its own
 block rather than adding a second one.
 
-To change a binding, put this in `~/.config/herdr-nav/config` and re-run `setup`:
+To change one, name the action and the key you want:
 
 ```sh
-HERDR_NAV_KEYS="grep=prefix+slash file=prefix+shift+g"
+herdr-nav setkey grep prefix+shift+g
 ```
+
+It records the choice and re-applies everything in one step. Actions are `menu`,
+`file`, `class`, `grep`, `recent`, `tree`, `breakpoint`, `debug`, `debug-all`.
 
 `herdr-nav doctor` verifies everything at any point.
 
