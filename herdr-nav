@@ -203,17 +203,21 @@ dispatch() {
         ctrl-o) open_in_idea  "$2" "${3:-}" ;;
         alt-b|ctrl-t) send_breakpoint "$2" "${3:-}" ;;
         ctrl-v) view_here     "$2" "${3:-}" ;;
-        *)      default_open  "$2" "${3:-}" ;;
+        ctrl-p) open_in_pane  "$2" "${3:-}" ;;
+        # Enter opens the file, same as in a results list, so Ctrl+R and Ctrl+]
+        # work straight away instead of dead-ending on a path.
+        *)      if [ "$DEPTH" -lt "$MAX_DEPTH" ]; then descend cmd_lines "$2" "${3:-1}"
+                else pause "Navigation depth limit ($MAX_DEPTH) reached."; fi ;;
     esac
 }
 
 # -------------------------------------------------------------- pickers ----
-HDR='Enter: open   ^T: breakpoint   ^V: view   Alt+W: resize   Esc: close'
+HDR='Enter: open file   ^P: path to pane   ^T: breakpoint   ^V: view   Esc: close'
 PREVIEW_CYCLE='alt-w:change-preview-window(right,75%|right,85%|down,60%|right,40%|right,60%)'
 
 pick() {
     local prompt=$1 preview=$2; shift 2
-    "$FZF" --prompt="$prompt" --header="$HDR" --expect=ctrl-o,ctrl-v,alt-b,ctrl-t \
+    "$FZF" --prompt="$prompt" --header="$HDR" --expect=ctrl-o,ctrl-v,alt-b,ctrl-t,ctrl-p \
            --preview "$preview" --info=inline --cycle --layout=reverse \
            --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview' "$@"
 }

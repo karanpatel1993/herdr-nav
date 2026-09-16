@@ -81,19 +81,24 @@ dependencies.
 
 ## Navigating
 
-Every search gives you a list. `Enter` on a result opens that file at that line —
-where you can search again. That is how you follow a call chain without starting
-over.
+`Enter` always opens the file. Once a file is open, `Ctrl+R` and `Ctrl+]` search
+again from there — that is how you follow a call chain without starting over.
 
-Tracing who calls `fillDob`:
+Say you have a file open and want to know who calls a method in it:
 
 ```
-prefix+Space  pick "callers"        → type "fillDob" → every call site
-Enter         on a result           → opens that file, on that line
-Ctrl+R        pick an identifier    → every caller of it
-Enter                               → opens that one
-Esc                                 → back one step
+prefix+⇧O     type "ProfileConsumer" → Enter      opens the file
+              move to the line you care about
+Ctrl+R        pick the method name                every caller of it
+Enter         on a result                         opens that file, on that line
+Ctrl+R        again, from there                   keep following the chain
+Esc                                               back one step
 ```
+
+`Ctrl+R` gives callers for a method and usages for a variable — it decides from
+the line. `Ctrl+]` jumps to where the identifier is defined.
+
+If you already know the name, skip the file: `prefix+Space` → `callers` → type it.
 
 ### Keys
 
