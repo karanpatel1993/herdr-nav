@@ -54,8 +54,9 @@ To change one, name the action and the key you want:
 herdr-nav setkey grep prefix+shift+g
 ```
 
-It records the choice and re-applies everything in one step. Actions are `menu`,
-`file`, `class`, `grep`, `recent`, `tree`, `breakpoint`, `debug`, `debug-all`.
+It records the choice and re-applies everything in one step. `herdr-nav keys`
+lists the action name next to every binding, so you can read off the one you
+want to change.
 
 `herdr-nav doctor` verifies everything at any point.
 
