@@ -619,12 +619,21 @@ cmd_install_deps() {
         url=$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
               | grep -oE '"browser_download_url": *"[^"]+"' | cut -d'"' -f4 | grep -E "$re" | head -1)
         [ -n "$url" ] || { printf '  %-10s no matching asset for %s/%s\n' "$want" "$os" "$arch"; return 1; }
-        curl -fsSL "$url" -o "$tmp/a.tar.gz" || { printf '  %-10s download failed\n' "$want"; return 1; }
-        tar xzf "$tmp/a.tar.gz" -C "$tmp" 2>/dev/null || { printf '  %-10s extract failed\n' "$want"; return 1; }
-        local f; f=$(find "$tmp" -type f -name "$want" -perm -u+x | head -1)
+        local arc="$tmp/a.${url##*.}"
+        curl -fsSL "$url" -o "$arc" || { printf '  %-10s download failed\n' "$want"; return 1; }
+        case $arc in
+            *.zip)
+                if command -v unzip >/dev/null 2>&1; then unzip -oq "$arc" -d "$tmp"
+                elif command -v python3 >/dev/null 2>&1; then
+                    python3 -c "import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$arc" "$tmp"
+                else printf '  %-10s needs unzip or python3 for .zip\n' "$want"; return 1; fi ;;
+            *)  tar xzf "$arc" -C "$tmp" 2>/dev/null ;;
+        esac || { printf '  %-10s extract failed\n' "$want"; return 1; }
+        # not -perm -u+x: python's zipfile extraction drops the executable bit
+        local f; f=$(find "$tmp" -type f -name "$want" | head -1)
         [ -n "$f" ] || { printf '  %-10s binary not found in archive\n' "$want"; return 1; }
         install -m755 "$f" "$bin/$want" && printf '  %-10s %s\n' "$want" "$("$bin/$want" --version 2>&1 | head -1)"
-        rm -f "$tmp/a.tar.gz"
+        rm -f "$arc"
     }
 
     local fzfarch=$arch rsarch mus
@@ -636,6 +645,7 @@ cmd_install_deps() {
     grab sharkdp/bat    "${rsarch}-${mus}\.tar\.gz$"        bat
     grab BurntSushi/ripgrep "${rsarch}-${mus}\.tar\.gz$"    rg
     grab gokcehan/lf    "lf-${os}-${arch}\.tar\.gz$"        lf
+    grab ast-grep/ast-grep "app-${rsarch}-${mus2}\\.zip$"      ast-grep
 
     printf '\n'
     case ":$PATH:" in *":$bin:"*) ;; *) printf 'NOTE: %s is not on your PATH.\n' "$bin" ;; esac

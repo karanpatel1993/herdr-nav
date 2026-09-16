@@ -33,8 +33,9 @@ memorise.
 curl -fsSL https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/install.sh | sh
 ```
 
-Installs herdr-nav and everything it needs — `fzf`, `fd`, `bat`, `ripgrep` — into
-`~/.local/bin`. No admin rights, nothing already on your `PATH` is touched.
+Installs herdr-nav and everything it needs into `~/.local/bin`: `fzf`, `fd`,
+`bat`, `ripgrep`, plus `ast-grep` for syntax-aware Java search and `lf` for the
+file tree. No admin rights, and nothing already on your `PATH` is touched.
 
 Then:
 
