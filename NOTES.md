@@ -182,3 +182,17 @@ of the install; the environment is a property of the caller.
 
 `readlink -f` is not used: it is absent from the macOS versions still in use.
 `resolve_link` walks the chain by hand.
+
+### The plugin working directory is a trap
+
+"Runtime commands run with the plugin directory as their working directory"
+reads like a convenience -- no absolute paths needed. For a tool scoped to the
+user's worktree it is the opposite: `$PWD` is herdr-nav's own checkout, which is
+itself a git repo, so every picker silently searched the wrong tree and found
+thirteen files.
+
+A keybinding popup gets `HERDR_ACTIVE_PANE_CWD` and `HERDR_ACTIVE_PANE_ID`. A
+plugin pane gets neither; it gets `HERDR_PLUGIN_CONTEXT_JSON`, carrying
+`focused_pane_cwd`, `focused_pane_id`, `workspace_cwd` and a `worktree` object.
+Popups are explicitly denied `HERDR_PANE_ID` -- the docs say so -- so the
+context JSON is the only route to the pane the user was actually in.

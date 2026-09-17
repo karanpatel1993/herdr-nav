@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2
+
+As a plugin, every picker searched herdr-nav's own checkout instead of your
+project. herdr runs plugin commands with the plugin directory as their working
+directory and does not set the `HERDR_ACTIVE_PANE_*` variables a keybinding
+popup gets, so the pane scope fell back to that directory. The invoking pane is
+in `HERDR_PLUGIN_CONTEXT_JSON` instead, and is now read from there -- which also
+restores `Ctrl+P` and the breakpoint hand-off, since both need the pane id.
+
 ## 0.3.1
 
 `herdr-nav keys` reported its own bindings as collisions and printed the

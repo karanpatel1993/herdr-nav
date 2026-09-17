@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.3.1
+VERSION=0.3.2
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -167,8 +167,30 @@ Run 'herdr-nav doctor' for details."
 }
 
 # ------------------------------------------------------------ pane scope ----
-PANE_CWD=${HERDR_ACTIVE_PANE_CWD:-${PWD}}
+# One top-level string out of HERDR_PLUGIN_CONTEXT_JSON.
+plugin_ctx() {
+    [ -n "${HERDR_PLUGIN_CONTEXT_JSON:-}" ] || return 1
+    if [ -n "$JQ" ]; then
+        printf '%s' "$HERDR_PLUGIN_CONTEXT_JSON" | "$JQ" -r --arg k "$1" '.[$k] // empty'
+    else
+        printf '%s' "$HERDR_PLUGIN_CONTEXT_JSON" \
+            | grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+            | head -1 | sed 's/.*"[[:space:]]*:[[:space:]]*"//; s/"$//'
+    fi
+}
+
+PANE_CWD=${HERDR_ACTIVE_PANE_CWD:-}
 TARGET=${HERDR_ACTIVE_PANE_ID:-${HERDR_PANE_ID:-}}
+# A plugin pane is told where it came from in JSON, not in the
+# HERDR_ACTIVE_PANE_* variables a keybinding popup gets -- and its working
+# directory is the plugin's own checkout. Take the invoking pane from the
+# context, or every picker searches herdr-nav's source instead of your project.
+if [ -z "$PANE_CWD" ] && [ -n "${HERDR_PLUGIN_CONTEXT_JSON:-}" ]; then
+    PANE_CWD=$(plugin_ctx focused_pane_cwd)
+    [ -n "$PANE_CWD" ] || PANE_CWD=$(plugin_ctx workspace_cwd)
+    [ -n "$TARGET" ]   || TARGET=$(plugin_ctx focused_pane_id)
+fi
+[ -n "$PANE_CWD" ] || PANE_CWD=$PWD
 ROOT=$(git -C "$PANE_CWD" rev-parse --show-toplevel 2>/dev/null) || ROOT=$PANE_CWD
 
 svc_name() {
