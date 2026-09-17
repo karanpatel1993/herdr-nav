@@ -202,6 +202,7 @@ $1"
 default_open() { case $OPEN_ACTION in idea) open_in_idea "$@" ;; print) pause "$(abs "$1")${2:+:$2}" ;; *) open_in_pane "$@" ;; esac; }
 dispatch() {
     case $1 in
+        ctrl-q) exit 0 ;;
         ctrl-o) open_in_idea  "$2" "${3:-}" ;;
         alt-b|ctrl-t) send_breakpoint "$2" "${3:-}" ;;
         ctrl-v) view_here     "$2" "${3:-}" ;;
@@ -214,12 +215,12 @@ dispatch() {
 }
 
 # -------------------------------------------------------------- pickers ----
-HDR='Enter: open file   ^P: path to pane   ^T: breakpoint   ^V: view   Esc: close'
+HDR='Enter: open   ^P: path to pane   ^T: breakpoint   ^V: view   Esc: back   ^Q: quit'
 PREVIEW_CYCLE='alt-w:change-preview-window(right,75%|right,85%|down,60%|right,40%|right,60%)'
 
 pick() {
     local prompt=$1 preview=$2; shift 2
-    "$FZF" --prompt="$prompt" --header="$HDR" --expect=ctrl-o,ctrl-v,alt-b,ctrl-t,ctrl-p \
+    "$FZF" --prompt="$prompt" --header="$HDR" --expect=ctrl-o,ctrl-v,alt-b,ctrl-t,ctrl-p,ctrl-q \
            --preview "$preview" --info=inline --cycle --layout=reverse \
            --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview' "$@"
 }
@@ -292,8 +293,8 @@ cmd_usages() {
     out=$(printf '%s\n' "$hits" \
         | "$FZF" --ansi --delimiter : --layout=reverse --info=inline \
                  --prompt="usages of $name> " \
-                 --header="$(printf '%s' "$hits" | grep -c .) hits${scope:+ in $(basename "$scope")}   Enter: go there   ^P: path to pane   ^T: breakpoint   ^V: view" \
-                 --expect=ctrl-v,alt-b,ctrl-t,ctrl-p \
+                 --header="$(printf '%s' "$hits" | grep -c .) hits${scope:+ in $(basename "$scope")}   Enter: go there   ^P: path   ^T: breakpoint   ^V: view   Esc: back   ^Q: quit" \
+                 --expect=ctrl-v,alt-b,ctrl-t,ctrl-p,ctrl-q \
                  --preview "$BAT --color=always --style=numbers --highlight-line {2} {1}" \
                  --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
                  --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview') || return 0
@@ -301,6 +302,7 @@ cmd_usages() {
     sel=${out#*$'\n'}; [ -n "$sel" ] || return 0
     path=${sel%%:*}; rest=${sel#*:}
     case ${out%%$'\n'*} in
+        ctrl-q) exit 0 ;;
         ctrl-v) view_here "$path" "${rest%%:*}" ;;
         alt-b|ctrl-t) send_breakpoint "$path" "${rest%%:*}" ;;
         ctrl-p) open_in_pane "$path" "${rest%%:*}" ;;
@@ -382,8 +384,8 @@ spelled differently at the call site."
     out=$(printf '%s\n' "$hits" \
         | "$FZF" --ansi --delimiter : --layout=reverse --info=inline \
                  --prompt="callers of $name> " \
-                 --header="$(printf '%s' "$hits" | grep -c .) call site(s)   Enter: go there   ^P: path to pane   ^T: breakpoint   ^V: view" \
-                 --expect=ctrl-v,alt-b,ctrl-t,ctrl-p \
+                 --header="$(printf '%s' "$hits" | grep -c .) call site(s)   Enter: go there   ^P: path   ^T: breakpoint   ^V: view   Esc: back   ^Q: quit" \
+                 --expect=ctrl-v,alt-b,ctrl-t,ctrl-p,ctrl-q \
                  --preview "$BAT --color=always --style=numbers --highlight-line {2} {1}" \
                  --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
                  --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview') || return 0
@@ -391,6 +393,7 @@ spelled differently at the call site."
     sel=${out#*$'\n'}; [ -n "$sel" ] || return 0
     path=${sel%%:*}; rest=${sel#*:}
     case ${out%%$'\n'*} in
+        ctrl-q) exit 0 ;;
         ctrl-v) view_here "$path" "${rest%%:*}" ;;
         alt-b|ctrl-t) send_breakpoint "$path" "${rest%%:*}" ;;
         ctrl-p) open_in_pane "$path" "${rest%%:*}" ;;
@@ -435,8 +438,8 @@ spelled differently. Try prefix+shift+U for every textual occurrence."
     out=$(printf '%s\n' "$hits" \
         | "$FZF" --ansi --delimiter : --layout=reverse --info=inline \
                  --prompt="definition of $name> " \
-                 --header="$(printf '%s' "$hits" | grep -c .) declaration(s)/override(s)   Enter: go there   ^P: path to pane   ^T: breakpoint   ^V: view" \
-                 --expect=ctrl-v,alt-b,ctrl-t,ctrl-p \
+                 --header="$(printf '%s' "$hits" | grep -c .) declaration(s)/override(s)   Enter: go there   ^P: path   ^T: breakpoint   ^V: view   Esc: back   ^Q: quit" \
+                 --expect=ctrl-v,alt-b,ctrl-t,ctrl-p,ctrl-q \
                  --preview "$BAT --color=always --style=numbers --highlight-line {2} {1}" \
                  --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
                  --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview') || return 0
@@ -444,6 +447,7 @@ spelled differently. Try prefix+shift+U for every textual occurrence."
     sel=${out#*$'\n'}; [ -n "$sel" ] || return 0
     path=${sel%%:*}; rest=${sel#*:}
     case ${out%%$'\n'*} in
+        ctrl-q) exit 0 ;;
         ctrl-v) view_here "$path" "${rest%%:*}" ;;
         alt-b|ctrl-t) send_breakpoint "$path" "${rest%%:*}" ;;
         ctrl-p) open_in_pane "$path" "${rest%%:*}" ;;
@@ -485,8 +489,8 @@ cmd_lines() {
     # back the plain text, so the line number still parses as field 1.
     out=$("$BAT" --color=always --style=numbers --paging=never "$file" 2>/dev/null \
         | "$FZF" --ansi --prompt="$(basename "$file") line> " --layout=reverse --no-sort --multi \
-                 --header="$(basename \"$file\")   Tab: mark   Enter: breakpoint   ^R: callers/usages   ^]: definition   ^P: path   Esc: back" \
-                 --expect=ctrl-v,ctrl-p,alt-u,ctrl-r,ctrl-] --delimiter=' +' --nth='3..' \
+                 --header="$(basename \"$file\")   Tab: mark   Enter: breakpoint   ^R: callers/usages   ^]: definition   Esc: back   ^Q: quit" \
+                 --expect=ctrl-v,ctrl-p,alt-u,ctrl-r,ctrl-],ctrl-q --delimiter=' +' --nth='3..' \
                  --bind "load:pos($start)" \
                  --preview "$BAT --color=always --style=numbers --highlight-line {1} '$file'" \
                  --preview-window "right,60%,border-left,+{1}+3/3,~0" \
@@ -496,6 +500,7 @@ cmd_lines() {
     line=$(printf '%s' "$sel" | head -1 | awk '{print $1}')
     start=$line
     case ${out%%$'\n'*} in
+        ctrl-q) exit 0 ;;
         ctrl-v) view_here "$file" "$line" ;;
         ctrl-p) open_in_pane "$file" "$line" ;;
         ctrl-])  local did
@@ -710,6 +715,7 @@ IN A LIST OF RESULTS
   Ctrl+V          view the file
   Alt+W / Alt+X   resize / hide the preview
   Esc             back one step
+  Ctrl+Q          close the popup entirely, however deep you are
   the mouse works: click to select, scroll the list or the preview
 
 IN AN OPEN FILE
@@ -720,6 +726,7 @@ IN AN OPEN FILE
   Enter           set a breakpoint on the marked lines
   Ctrl+P          send path:line to your pane
   Esc             back one step
+  Ctrl+Q          close the popup entirely
 
   Enter descends, Esc climbs back — that is how you follow a call chain.
 

@@ -134,6 +134,7 @@ Once a list of results is open:
 | `Ctrl+T` | set a breakpoint there |
 | `Ctrl+V` | view the file |
 | `Alt+W` | resize the preview |
+| `Esc` / `Ctrl+Q` | back one step / close the popup entirely |
 
 Once a file is open:
 
