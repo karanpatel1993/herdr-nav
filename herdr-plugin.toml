@@ -18,6 +18,12 @@ platforms = ["linux", "macos"]
 [[build]]
 command = ["sh", "plugin-build.sh"]
 
+# Re-points ~/.local/bin/herdr-nav at the current checkout. Runs here rather
+# than in the build step because herdr moves the checkout after building, so
+# only a runtime command knows the final path.
+[[startup]]
+command = ["sh", "plugin-linkbin"]
+
 # --------------------------------------------------------------- panes ----
 # One entrypoint per binding. These mirror what `herdr-nav keys` writes in
 # standalone mode: popups at 90%x85%, and a split for the debugger.
@@ -96,6 +102,14 @@ command = ["./herdr-nav", "debug"]
 # ------------------------------------------------------------- actions ----
 # A key can only bind to an action, never straight to a pane, so each action is
 # a one-line shim that opens its pane.
+
+# Not a pane: it writes the keybindings and exits. This is how you finish an
+# install before `herdr-nav` is on PATH.
+[[actions]]
+id = "setup"
+title = "Add herdr-nav keybindings"
+contexts = ["workspace"]
+command = ["./herdr-nav", "setup"]
 
 [[actions]]
 id = "menu"

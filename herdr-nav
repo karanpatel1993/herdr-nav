@@ -1066,6 +1066,12 @@ cmd_uninstall() {
 # keeping the change, and restores the backup if herdr rejects it.
 cmd_setup() {
     local cfg backup tmp gen
+    # As a plugin this is the first command that runs from the final checkout,
+    # so it is the earliest point that can put herdr-nav on PATH correctly.
+    if [ "$IS_PLUGIN" = 1 ] && [ -x "$PLUGIN_ROOT/plugin-linkbin" ]; then
+        HERDR_PLUGIN_ROOT=$PLUGIN_ROOT sh "$PLUGIN_ROOT/plugin-linkbin" || true
+        printf '\n'
+    fi
     cfg=${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}
     mkdir -p "$(dirname "$cfg")"
     [ -f "$cfg" ] || : > "$cfg"

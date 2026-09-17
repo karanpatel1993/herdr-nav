@@ -1,0 +1,30 @@
+#!/bin/sh
+# Puts `herdr-nav` on PATH, pointing at wherever herdr currently keeps the
+# checkout.
+#
+# Not done at build time: herdr builds in a temporary directory and moves the
+# checkout afterwards, so a link made during the build points at a path that no
+# longer exists. Only a runtime command knows the real root.
+set -eu
+
+ROOT=${HERDR_PLUGIN_ROOT:-${1:-}}
+[ -n "$ROOT" ] || { echo "herdr-nav: no plugin root" >&2; exit 1; }
+[ -f "$ROOT/herdr-nav" ] || { echo "herdr-nav: no script in $ROOT" >&2; exit 1; }
+
+BIN=${HERDR_NAV_BIN:-$HOME/.local/bin}
+mkdir -p "$BIN"
+
+if [ -e "$BIN/herdr-nav" ] && [ ! -L "$BIN/herdr-nav" ]; then
+    echo "herdr-nav: $BIN/herdr-nav is a real file, not a link -- leaving it alone."
+    echo "  A standalone install is already there. Run 'herdr-nav uninstall' first"
+    echo "  if you meant to switch to the plugin."
+    exit 1
+fi
+
+ln -sfn "$ROOT/herdr-nav" "$BIN/herdr-nav"
+echo "herdr-nav: $BIN/herdr-nav -> $ROOT/herdr-nav"
+
+case ":${PATH:-}:" in
+    *":$BIN:"*) ;;
+    *) echo "herdr-nav: note -- $BIN is not on your PATH" ;;
+esac
