@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+**Attaching a debugger works.** Picking a service from the list closed the pane
+instead of attaching. `set -o pipefail` is on, and the port filter's last
+iteration returns non-zero whenever the highest listening port is not a debug
+port — which the caller read as "cancelled" and exited silently.
+
 ## 0.2.1
 
 **The debugger list only shows real debug ports.** It used to offer every

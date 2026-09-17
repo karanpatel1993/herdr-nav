@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.2.1
+VERSION=0.2.2
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -550,8 +550,12 @@ cmd_breakpoint() {
 
 # ---------------------------------------------------------------- debug ----
 live_ports() {
+    # `set -o pipefail` is on, so a filtering loop whose last iteration rejects
+    # a port makes the whole pipeline non-zero -- which every caller reads as
+    # "the user cancelled". End on a true status.
     listening_ports \
     | while read -r p; do known_port "$p" && [ "$p" -ge 1024 ] && printf '%s\n' "$p"; done
+    return 0
 }
 jvm_tree() {   # the git worktree the JVM on $1 is running out of, or ""
     local pid dir root c
