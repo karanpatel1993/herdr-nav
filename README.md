@@ -12,14 +12,14 @@ reach for.
 | | |
 |---|---|
 | `prefix+Space` | **menu — everything, searchable** |
-| `prefix+⇧O` | go to file |
-| `prefix+⇧C` | go to class |
-| `prefix+⇧F` | find in files |
-| `prefix+⇧E` | recent files |
-| `prefix+⇧V` | project tree |
-| `prefix+⇧B` | set breakpoints by browsing a file |
-| `prefix+⇧S` | attach `jdb` to a service |
-| `prefix+⇧A` | attach `jdb` to every service |
+| `prefix+Shift+O` | go to file |
+| `prefix+Shift+C` | go to class |
+| `prefix+Shift+F` | find in files |
+| `prefix+Shift+E` | recent files |
+| `prefix+Shift+V` | project tree |
+| `prefix+Shift+B` | set breakpoints by browsing a file |
+| `prefix+Shift+S` | attach `jdb` to a service |
+| `prefix+Shift+A` | attach `jdb` to every service |
 
 Finding usages, callers and definitions lives in the menu, and on `Ctrl+R` /
 `Ctrl+]` once a file is open — which is where you normally want them.
@@ -110,11 +110,11 @@ again from there — that is how you follow a call chain without starting over.
 Say you have a file open and want to know who calls a method in it:
 
 ```
-prefix+⇧O     type "ProfileConsumer" → Enter      opens the file
-              move to the line you care about
-Ctrl+R        pick the method name                every caller of it
-Enter         on a result                         opens that file, on that line
-Ctrl+R        again, from there                   keep following the chain
+prefix+Shift+O  type "ProfileConsumer" → Enter    opens the file
+                move to the line you care about
+Ctrl+R          pick the method name              every caller of it
+Enter           on a result                       opens that file, on that line
+Ctrl+R          again, from there                 keep following the chain
 Esc                                               back one step
 ```
 
@@ -154,16 +154,16 @@ Click to select and scroll with the wheel anywhere, including the preview.
 Attach a Java debugger to a running service and read variables, without leaving
 herdr.
 
-1. `prefix+⇧S` — pick a running service. `jdb` attaches in a new pane.
-2. `prefix+⇧B` — pick a file, `Tab` the lines you want, `Enter`. The breakpoint
+1. `prefix+Shift+S` — pick a running service. `jdb` attaches in a new pane.
+2. `prefix+Shift+B` — pick a file, `Tab` the lines you want, `Enter`. The breakpoint
    commands are typed into the debugger pane.
 3. Press `Enter` in that pane to arm them, then `cont` to run.
 
 | | |
 |---|---|
-| `prefix+⇧S` | attach to one service |
-| `prefix+⇧A` | attach to every running service, one pane each |
-| `prefix+⇧B` | pick a file and set breakpoints in it |
+| `prefix+Shift+S` | attach to one service |
+| `prefix+Shift+A` | attach to every running service, one pane each |
+| `prefix+Shift+B` | pick a file and set breakpoints in it |
 
 To print the variables and the surrounding source every time a breakpoint hits,
 add this to `~/.jdbrc`:

@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.2.6
+VERSION=0.2.7
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -734,11 +734,11 @@ cat <<'HELPTEXT'
 herdr-nav — find files, search code and debug Java inside herdr.
 
 OPENING A SEARCH            (prefix is herdr's own, ctrl+b by default)
-  prefix+Space    menu — every action, searchable. Start here if unsure.
-  prefix+⇧O       go to file          prefix+⇧V   project tree
-  prefix+⇧C       go to class         prefix+⇧B   set breakpoints in a file
-  prefix+⇧F       find in files       prefix+⇧S   attach a debugger
-  prefix+⇧E       recent files        prefix+⇧A   attach to every service
+  prefix+Space      menu — every action, searchable. Start here if unsure.
+  prefix+Shift+O    go to file        prefix+Shift+V   project tree
+  prefix+Shift+C    go to class       prefix+Shift+B   set breakpoints
+  prefix+Shift+F    find in files     prefix+Shift+S   attach a debugger
+  prefix+Shift+E    recent files      prefix+Shift+A   attach to every service
 
 IN A LIST OF RESULTS
   Enter           open the file, at that line
@@ -765,9 +765,9 @@ IN AN OPEN FILE
   Enter descends, Esc climbs back — that is how you follow a call chain.
 
 DEBUGGING
-  1. prefix+⇧S    pick a running service; jdb attaches in a new pane
-  2. prefix+⇧B    pick a file, Tab the lines you want, Enter
-                  the stop-at commands are typed into the debugger pane
+  1. prefix+Shift+S    pick a running service; jdb attaches in a new pane
+  2. prefix+Shift+B    pick a file, Tab the lines you want, Enter
+                       the stop-at commands are typed into the debugger pane
   3. press Enter there to arm them, then cont
 
   At the jdb prompt:
@@ -820,17 +820,17 @@ HELPTEXT
 # ----------------------------------------------------------------- menu ----
 # One key to remember. Everything else is discoverable from here, so nobody has
 # to memorise eleven bindings to get started.
-MENU='file|⇧O|find a file by name
-class|⇧C|find a file by class name
-grep|⇧F|search all code
+MENU='file|Shift+O|find a file by name
+class|Shift+C|find a file by class name
+grep|Shift+F|search all code
 usages||where is this variable used
 callers||who calls this method
 def||where is this defined
-recent|⇧E|files I opened recently
-tree|⇧V|browse the folder tree
-breakpoint|⇧B|set breakpoints in a file
-debug|⇧S|attach a debugger to a service
-debug-all|⇧A|attach a debugger to every service
+recent|Shift+E|files I opened recently
+tree|Shift+V|browse the folder tree
+breakpoint|Shift+B|set breakpoints in a file
+debug|Shift+S|attach a debugger to a service
+debug-all|Shift+A|attach a debugger to every service
 help||how to use all of this
 doctor||check my setup
 keys||print bindings for herdr config'
@@ -839,7 +839,7 @@ cmd_menu() {
     need fzf
     local pick sub
     pick=$(printf '%s\n' "$MENU" \
-        | awk -F'|' '{ printf "%-12s %-4s %s\n", $1, $2, $3 }' \
+        | awk -F'|' '{ printf "%-12s %-8s %s\n", $1, $2, $3 }' \
         | "$FZF" --layout=reverse --info=inline --prompt='herdr-nav> ' \
                  --header='type to filter, Enter to run') || exit 0
     sub=$(printf '%s' "$pick" | awk '{print $1}')

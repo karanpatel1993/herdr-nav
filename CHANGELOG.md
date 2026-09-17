@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.7
+
+Bindings are written `Shift+O` rather than `⇧O` in the README and in
+`herdr-nav help`. The glyph sat oddly beside the spelled-out `Ctrl+` and `Alt+`
+alongside it, and renders narrow enough on some terminals to read as a smudge.
+
 ## 0.2.6
 
 Trimmed the README's debugging notes to the fact and the fix; the measurement,
