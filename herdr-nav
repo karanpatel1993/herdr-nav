@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.1.0
+VERSION=0.2.0
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -903,7 +903,11 @@ cmd_update() {
     # this process reading the original inode untouched.
     mv "$tmp" "$SELF" || die "could not replace $SELF"
     trap - EXIT
-    printf 'Updated %s -> %s at %s\n' "$before" "$after" "$SELF"
+    if [ "$before" = "$after" ]; then
+        printf 'Updated %s at %s (same version %s, newer build)\n' "$SELF" "$SELF" "$after"
+    else
+        printf 'Updated %s -> %s at %s\n' "$before" "$after" "$SELF"
+    fi
     printf 'Keybindings are unchanged; no need to re-run setup.\n'
 }
 

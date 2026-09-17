@@ -2,6 +2,22 @@
 
 Detail that would clutter the README. Read it if something surprises you.
 
+## Releasing
+
+Every published change bumps `VERSION` in `herdr-nav`, or `update` reports
+"0.1.0 -> 0.1.0" and tells the user nothing.
+
+```sh
+sed -i 's/^VERSION=.*/VERSION=0.3.0/' herdr-nav   # bump
+$EDITOR CHANGELOG.md                              # what changed, in user terms
+git commit -am "release 0.3.0" && git push
+git tag -a v0.3.0 -m "herdr-nav 0.3.0" && git push origin v0.3.0
+gh release create v0.3.0 --notes-from-tag
+```
+
+Patch for fixes, minor for new commands or keys. `update` compares the running
+version with the fetched one and says which way it moved.
+
 ## Two herdr gotchas
 
 **Bindings need an absolute path.** The herdr server runs with a bare `PATH` —
