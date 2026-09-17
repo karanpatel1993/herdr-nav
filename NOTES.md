@@ -112,6 +112,21 @@ Accurate for distinctive names, noisy for short ones:
 | `fillDob` | 2 (call + declaration) | 1 |
 | `getNormalizedString` | 84 | 74 |
 
+## Suspend-all is not configurable
+
+jdb suspends every thread on a breakpoint. Measured on a two-thread JVM: while
+one thread sat at a breakpoint, the other produced no output at all over five
+seconds. There is no per-breakpoint suspend policy — `stop at` and `stop in`
+always suspend everything.
+
+For a web app that means the server stops accepting requests entirely until you
+`cont`. Cancelling the client request changes nothing. If the prompt is
+unresponsive because the thread it points at died with the request, `threads`,
+then `thread <id>`, then `cont`.
+
+IntelliJ can suspend a single thread and keep serving. If you need that, attach
+IntelliJ to the same port instead.
+
 ## Breakpoints
 
 Marked lines become `stop at <fqcn>:<line>` commands, joined so that every one

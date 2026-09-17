@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.6
+
+Trimmed the README's debugging notes to the fact and the fix; the measurement,
+the dead-thread recovery and the IntelliJ comparison moved to NOTES.md.
+
 ## 0.2.5
 
 An open file has always been searchable by typing — it is an fzf picker — but
