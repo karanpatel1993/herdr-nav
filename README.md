@@ -37,6 +37,15 @@ Installs herdr-nav and everything it needs into `~/.local/bin`: `fzf`, `fd`,
 `bat`, `ripgrep`, plus `ast-grep` for syntax-aware Java search and `lf` for the
 file tree. No admin rights, and nothing already on your `PATH` is touched.
 
+Or as a herdr plugin, which installs the same dependencies and lets herdr manage
+the files:
+
+```sh
+herdr plugin install karanpatel1993/herdr-nav
+```
+
+Pick one. Running both leaves two copies competing for the same keys.
+
 Then:
 
 ```sh

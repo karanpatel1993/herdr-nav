@@ -1,0 +1,152 @@
+# herdr-nav as a herdr plugin.
+#
+#   herdr plugin install karanpatel1993/herdr-nav
+#
+# The keys are not here: herdr has no manifest keybinding section, so the
+# bindings still come from `herdr-nav setup`, which writes plugin_action blocks
+# into your own config.toml. Everything else herdr owns.
+
+id = "herdr-nav"
+name = "herdr-nav"
+version = "0.3.0"
+min_herdr_version = "0.9.0"
+description = "Find files, search code and debug Java inside herdr"
+platforms = ["linux", "macos"]
+
+# Dependencies, the PATH symlink and the plugin marker. Runs on install only --
+# `herdr plugin link` skips build, which is what you want while authoring.
+[[build]]
+command = ["sh", "plugin-build.sh"]
+
+# --------------------------------------------------------------- panes ----
+# One entrypoint per binding. These mirror what `herdr-nav keys` writes in
+# standalone mode: popups at 90%x85%, and a split for the debugger.
+
+[[panes]]
+id = "menu"
+title = "herdr-nav menu"
+placement = "popup"
+width = "90%"
+height = "85%"
+command = ["./herdr-nav", "menu"]
+
+[[panes]]
+id = "file"
+title = "Go to file"
+placement = "popup"
+width = "90%"
+height = "85%"
+command = ["./herdr-nav", "file"]
+
+[[panes]]
+id = "class"
+title = "Go to class"
+placement = "popup"
+width = "90%"
+height = "85%"
+command = ["./herdr-nav", "class"]
+
+[[panes]]
+id = "grep"
+title = "Find in files"
+placement = "popup"
+width = "90%"
+height = "85%"
+command = ["./herdr-nav", "grep"]
+
+[[panes]]
+id = "recent"
+title = "Recent files"
+placement = "popup"
+width = "90%"
+height = "85%"
+command = ["./herdr-nav", "recent"]
+
+[[panes]]
+id = "tree"
+title = "Project tree"
+placement = "popup"
+width = "90%"
+height = "85%"
+command = ["./herdr-nav", "tree"]
+
+[[panes]]
+id = "breakpoint"
+title = "Set breakpoints"
+placement = "popup"
+width = "90%"
+height = "85%"
+command = ["./herdr-nav", "breakpoint"]
+
+[[panes]]
+id = "debug-all"
+title = "Attach every debugger"
+placement = "popup"
+width = "90%"
+height = "85%"
+command = ["./herdr-nav", "debug-all"]
+
+# jdb needs a pane that outlives the popup, so this one splits.
+[[panes]]
+id = "debug"
+title = "Attach a debugger"
+placement = "split"
+command = ["./herdr-nav", "debug"]
+
+# ------------------------------------------------------------- actions ----
+# A key can only bind to an action, never straight to a pane, so each action is
+# a one-line shim that opens its pane.
+
+[[actions]]
+id = "menu"
+title = "herdr-nav menu"
+contexts = ["workspace"]
+command = ["sh", "plugin-open", "menu"]
+
+[[actions]]
+id = "file"
+title = "Go to file"
+contexts = ["workspace"]
+command = ["sh", "plugin-open", "file"]
+
+[[actions]]
+id = "class"
+title = "Go to class"
+contexts = ["workspace"]
+command = ["sh", "plugin-open", "class"]
+
+[[actions]]
+id = "grep"
+title = "Find in files"
+contexts = ["workspace"]
+command = ["sh", "plugin-open", "grep"]
+
+[[actions]]
+id = "recent"
+title = "Recent files"
+contexts = ["workspace"]
+command = ["sh", "plugin-open", "recent"]
+
+[[actions]]
+id = "tree"
+title = "Project tree"
+contexts = ["workspace"]
+command = ["sh", "plugin-open", "tree"]
+
+[[actions]]
+id = "breakpoint"
+title = "Set breakpoints"
+contexts = ["workspace"]
+command = ["sh", "plugin-open", "breakpoint"]
+
+[[actions]]
+id = "debug"
+title = "Attach a debugger"
+contexts = ["workspace"]
+command = ["sh", "plugin-open", "debug"]
+
+[[actions]]
+id = "debug-all"
+title = "Attach every debugger"
+contexts = ["workspace"]
+command = ["sh", "plugin-open", "debug-all"]

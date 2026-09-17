@@ -143,3 +143,42 @@ bit for Command, so a terminal cannot distinguish ⌘-click from a plain click.
 herdr's own link handlers use Ctrl+click for this reason, and they only fire on
 URLs, not arbitrary source identifiers. `Ctrl+R` on a clicked line is the
 equivalent here.
+
+## Plugin mode
+
+`herdr plugin install` and the standalone `curl | sh` produce the same keys and
+the same commands. What differs is who owns the directory the script sits in,
+and that ownership is the whole reason the two modes exist in the code.
+
+Three things the manifest cannot do, each of which shaped the port:
+
+**A key cannot bind to a pane.** `[[keys.command]]` accepts `type =
+"plugin_action"` and nothing pane-shaped, and an action is a plain command with
+no UI of its own. So every binding goes key → action → `plugin-open` →
+`herdr plugin pane open --entrypoint`. Nine one-line actions exist purely to
+cross that gap.
+
+**The manifest has no keybinding section**, so `setup` does not go away under a
+plugin. It writes the same fenced block into the user's `config.toml`, with
+`type = "plugin_action"` and `command = "herdr-nav.file"` in place of a shell
+type and an absolute path. Collision avoidance and `setkey` are unchanged.
+
+**There is no `herdr plugin update`.** Reinstalling replaces the managed
+checkout, so that is the update path. `cmd_update` must not self-rewrite there:
+herdr would discard the edit on the next install, and until then the files would
+not match the commit herdr recorded.
+
+### Detect the mode by location, not environment
+
+The obvious check is `HERDR_PLUGIN_ID`, and it is wrong. herdr injects it only
+into commands it launches itself — so it is set inside a popup and **absent at a
+shell prompt**, which is precisely where someone types `herdr-nav update`. With
+the build step's `~/.local/bin` symlink in place, that invocation would look
+standalone and rewrite a file inside herdr's checkout.
+
+So the build step drops `.herdr-nav-plugin` in the plugin root, and the script
+resolves its own path through the symlink to look for it. Location is a property
+of the install; the environment is a property of the caller.
+
+`readlink -f` is not used: it is absent from the macOS versions still in use.
+`resolve_link` walks the chain by hand.

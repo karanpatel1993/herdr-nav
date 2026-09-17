@@ -1,0 +1,8 @@
+#!/bin/sh
+# Opens one of the plugin's pane entrypoints.
+#
+# Keys bind to actions, and actions are plain commands with no UI of their own,
+# so every binding lands here and asks herdr to open the matching pane.
+set -eu
+exec "${HERDR_BIN_PATH:-herdr}" plugin pane open \
+     --plugin "${HERDR_PLUGIN_ID:-herdr-nav}" --entrypoint "$1"

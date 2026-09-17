@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.2.7
+VERSION=0.3.0
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -60,6 +60,33 @@ DEBUG_PORTS=${HERDR_NAV_DEBUG_PORTS:-}
 
 SELF=$(command -v "$0" 2>/dev/null || printf '%s' "$0")
 case $SELF in /*) ;; *) SELF=$PWD/${SELF#./} ;; esac
+
+# Installed by `herdr plugin install`, or standalone? The two differ in who owns
+# the directory this script sits in, which decides whether `update` may rewrite
+# it and whether `uninstall` may delete it.
+#
+# Detected from the location, never from the environment: herdr sets
+# HERDR_PLUGIN_ID only for commands it launches itself, so a plugin user typing
+# `herdr-nav update` at a shell prompt would look standalone and corrupt the
+# managed checkout -- the one case the check exists for.
+PLUGIN_ID=herdr-nav
+# readlink -f is absent from the macOS versions still in the wild, so walk it.
+resolve_link() {
+    local p=$1 d n=0
+    while [ -L "$p" ] && [ "$n" -lt 32 ]; do
+        d=$(dirname "$p"); p=$(readlink "$p")
+        case $p in /*) ;; *) p=$d/$p ;; esac
+        n=$((n + 1))
+    done
+    printf '%s' "$p"
+}
+REAL_SELF=$(resolve_link "$SELF")
+PLUGIN_ROOT=$(cd "$(dirname "$REAL_SELF")" 2>/dev/null && pwd) || PLUGIN_ROOT=
+if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/.herdr-nav-plugin" ]; then
+    IS_PLUGIN=1
+else
+    IS_PLUGIN=0
+fi
 
 # Ripgrep answers a real query in ~0.1s, so there is nothing to index. What hurts
 # is the first keystroke: a 1-char query can match millions of lines and fzf has
@@ -810,6 +837,11 @@ COMMANDS
   herdr-nav update                fetch the latest version in place
   herdr-nav uninstall             remove bindings, config, state and the script
 
+  Installed with `herdr plugin install`? Then herdr owns the files: `update`
+  points you at `herdr plugin install ...` instead of rewriting itself, and
+  `uninstall` leaves the checkout for `herdr plugin uninstall herdr-nav`.
+  Everything else behaves the same in both modes.
+
 LIMITS
   Search is syntax-aware, not type-aware: it cannot tell your `status` from
   another class's `status`, overloads look alike, and reflection, Lombok and
@@ -926,6 +958,14 @@ cmd_setkey() {
 # Replaces this script in place with the latest published version. Keybindings
 # point at the path, not the contents, so `setup` does not need re-running.
 cmd_update() {
+    if [ "$IS_PLUGIN" = 1 ]; then
+        printf 'Installed as a herdr plugin, so herdr owns this directory:\n  %s\n\n' "$PLUGIN_ROOT"
+        printf 'Update with:\n  herdr plugin install karanpatel1993/%s\n\n' "$PLUGIN_ID"
+        printf 'There is no `herdr plugin update`; reinstalling re-clones, re-runs\n'
+        printf 'the dependency step and replaces the checkout. Your config, state\n'
+        printf 'and keybindings are left alone.\n'
+        return 0
+    fi
     local url=https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav
     local tmp before after
     before=$(VERSION_ONLY=1; printf '%s' "$VERSION")
@@ -973,11 +1013,17 @@ cmd_uninstall() {
     fi
     [ -d "$CONF_DIR" ] && { printf '  config       %s\n' "$CONF_DIR"; had=1; }
     [ -d "$STATE" ]    && { printf '  state        %s\n' "$STATE"; had=1; }
-    [ -f "$SELF" ]     && { printf '  script       %s\n' "$SELF"; had=1; }
+    if [ "$IS_PLUGIN" = 1 ]; then
+        [ -L "$SELF" ] && { printf '  symlink      %s\n' "$SELF"; had=1; }
+    else
+        [ -f "$SELF" ] && { printf '  script       %s\n' "$SELF"; had=1; }
+    fi
     [ "$had" = 1 ] || { printf '  (nothing found)\n'; return 0; }
 
     printf '\nKept: fzf, fd, bat, ripgrep, ast-grep, lf -- other tools may use them.\n'
-    printf 'Also kept: any %s.bak.* backups.\n\n' "$(basename "$cfg")"
+    printf 'Also kept: any %s.bak.* backups.\n' "$(basename "$cfg")"
+    [ "$IS_PLUGIN" = 1 ] && printf 'Also kept: %s -- that checkout is herdr\x27s to remove.\n' "$PLUGIN_ROOT"
+    printf '\n'
 
     if [ "${1:-}" != --yes ] && [ "${1:-}" != -y ]; then
         printf 'Proceed? [y/N] '
@@ -1003,7 +1049,15 @@ cmd_uninstall() {
     rm -rf "$CONF_DIR" "$STATE"
     printf 'Removed config and state.\n'
     # last: the script is what is currently executing
-    rm -f "$SELF" && printf 'Removed %s\n\nUninstalled.\n' "$SELF"
+    if [ "$IS_PLUGIN" = 1 ]; then
+        # only the PATH symlink is ours -- deleting a file out of herdr's managed
+        # checkout would leave the plugin registered and half-present
+        [ -L "$SELF" ] && rm -f "$SELF" && printf 'Removed %s\n' "$SELF"
+        printf '\nherdr still has the plugin registered. Finish with:\n'
+        printf '  herdr plugin uninstall %s\n' "$PLUGIN_ID"
+    else
+        rm -f "$SELF" && printf 'Removed %s\n\nUninstalled.\n' "$SELF"
+    fi
 }
 
 # ---------------------------------------------------------------- setup ----
@@ -1117,7 +1171,11 @@ cmd_keys() {   # $1: --toml for config blocks, otherwise a readable table
         printf '  %-12s %-20s  %s\n' "ACTION" "KEY" "WHAT IT DOES"; }
     [ "$mode" = --toml ] && { printf '%s\n' "$MARK_BEGIN"
         printf '# Generated by herdr-nav setup -- anything between the markers is replaced.\n'
-        printf '# The absolute path matters: the herdr server runs with a bare PATH.\n\n'; }
+        if [ "$IS_PLUGIN" = 1 ]; then
+            printf '# Installed as a herdr plugin; herdr resolves these actions itself.\n\n'
+        else
+            printf '# The absolute path matters: the herdr server runs with a bare PATH.\n\n'
+        fi; }
 
     for want in menu:space:popup:'everything, searchable' \
                 file:o:popup:'go to file' \
@@ -1150,7 +1208,12 @@ cmd_keys() {   # $1: --toml for config blocks, otherwise a readable table
         [ -n "$key" ] || { [ "$mode" = --toml ] || printf '  %-12s %-20s  %s (NO FREE KEY)\n' "$action" "-" "$desc"; continue; }
         taken=$(printf '%s\n%s\n' "$taken" "$key")
 
-        if [ "$mode" = --toml ]; then
+        if [ "$mode" = --toml ] && [ "$IS_PLUGIN" = 1 ]; then
+            # A key cannot name a pane, only an action, so these point at the
+            # nine shim actions. Popup geometry lives in herdr-plugin.toml.
+            printf '[[keys.command]]\nkey = "%s"\ntype = "plugin_action"\ncommand = "%s.%s"\ndescription = "%s"\n\n' \
+                   "$key" "$PLUGIN_ID" "$action" "$desc"
+        elif [ "$mode" = --toml ]; then
             printf '[[keys.command]]\nkey = "%s"\ntype = "%s"\ncommand = "%s %s"\ndescription = "%s"\n' \
                    "$key" "$kind" "$self" "$action" "$desc"
             [ "$kind" = popup ] && printf 'width = "90%%"\nheight = "85%%"\n'

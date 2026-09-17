@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0
+
+Installable as a herdr plugin: `herdr plugin install karanpatel1993/herdr-nav`.
+The manifest declares the nine pickers as pane entrypoints, so herdr owns the
+popup geometry, and a build step brings the dependencies and links the script
+onto `PATH` so every subcommand still works by name.
+
+Keys and commands are identical either way. Two differ, because under a plugin
+the directory belongs to herdr: `update` points at `herdr plugin install`
+rather than rewriting itself, and `uninstall` removes the bindings, config and
+symlink but leaves the checkout to `herdr plugin uninstall`.
+
+Which mode is in play is read from where the script sits -- a marker the build
+step drops -- not from the environment. `HERDR_PLUGIN_ID` is set only for
+commands herdr launches, so it is absent at a shell prompt, which is exactly
+where `update` must not guess wrong.
+
+The standalone `curl | sh` install is unchanged.
+
 ## 0.2.7
 
 Bindings are written `Shift+O` rather than `⇧O` in the README and in
