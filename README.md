@@ -174,6 +174,39 @@ monitor list
 Leave `monitor where` out on a servlet app — a Jetty stack is 110 frames of
 framework and a handful of yours. Type `where` when you actually want it.
 
+### At the jdb prompt
+
+| | |
+|---|---|
+| `cont` | resume until the next breakpoint |
+| `next` | run this line, stay in this method |
+| `step` | step **into** the call on this line |
+| `step up` | finish this method, back to the caller |
+| `dump x` | every field of an object — what you want for anything non-trivial |
+| `print x` | one value; also `print x.method()` and `print x.id + 1` |
+| `locals` | variables in the current frame |
+| `where` | the call stack |
+| `up` / `down` | move a frame, then `locals` again |
+| `clear` | list breakpoints; `clear <class>:<line>` removes one |
+| `quit` | detach |
+
+Stopped *on* a line means it has not run yet, so a variable assigned there is
+still empty. `next` once, then `dump` it.
+
+### A breakpoint freezes the whole server
+
+jdb suspends every thread, not just the one that hit the breakpoint — measured:
+an unrelated thread produced no output at all while another sat at a breakpoint.
+On a web app that means Jetty stops accepting requests entirely.
+
+So if a second request seems to hang, the server is genuinely frozen. **`cont`
+is what restarts it** — cancelling the browser request does nothing. If the
+prompt is unresponsive because the thread it points at died with the request,
+use `threads`, then `thread <id>`, then `cont`.
+
+IntelliJ can suspend a single thread and keep serving; jdb has no equivalent.
+For that, attach IntelliJ to the same port instead.
+
 If a service is running code built from a different worktree than your pane, the
 service list says so — otherwise your line numbers point at the wrong lines.
 

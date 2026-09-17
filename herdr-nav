@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.2.3
+VERSION=0.2.4
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -775,8 +775,18 @@ DEBUGGING
     up / down       move a frame, then locals again
     print <expr>    evaluate something
     step / next     step into / over
+    dump <x>        every field of an object -- use this, not print, for objects
     clear           list breakpoints;  clear <class>:<line> removes one
+    threads         list threads;  thread <id> switches
     quit            detach
+
+  Stopped *on* a line means it has not run yet, so a variable assigned there is
+  still empty. `next` once, then `dump` it.
+
+  A breakpoint suspends EVERY thread, not just the one that hit it. On a web app
+  that stops the server accepting requests, so a second request will appear to
+  hang -- `cont` is what restarts it. IntelliJ can suspend a single thread and
+  keep serving; jdb cannot.
 
   Put this in ~/.jdbrc to print variables and surrounding source on every stop:
     monitor locals

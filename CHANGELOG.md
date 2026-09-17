@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4
+
+Documented the jdb commands you need once attached — `cont`, `next`, `step`,
+`dump`, `print`, `up`/`down`, `clear`, `threads` — in both the README and
+`herdr-nav help`. Also documented two things that read as bugs and are not: a
+variable assigned on the line you are stopped at is still empty until you
+`next`, and a breakpoint suspends every thread, so a web server stops accepting
+requests until you `cont`.
+
 ## 0.2.3
 
 The suggested `~/.jdbrc` no longer includes `monitor where`. On a servlet app
