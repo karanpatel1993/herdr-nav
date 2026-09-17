@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.2.0
+VERSION=0.2.1
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -94,6 +94,7 @@ if [ "$PLATFORM" = linux ]; then
         ss -ltnp 2>/dev/null | grep ":$1 " | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2
     }
     pid_cmdline() { tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null; }
+    proc_cwd()    { readlink "/proc/$1/cwd" 2>/dev/null; }
     rev_lines()   { tac; }
 else
     PLATFORM_TOOL=lsof
@@ -103,6 +104,7 @@ else
     }
     pid_on_port() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -1; }
     pid_cmdline() { ps -o command= -p "$1" 2>/dev/null; }
+    proc_cwd()    { lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1; }
     rev_lines()   { tail -r; }
 fi
 
@@ -143,17 +145,28 @@ TARGET=${HERDR_ACTIVE_PANE_ID:-${HERDR_PANE_ID:-}}
 ROOT=$(git -C "$PANE_CWD" rev-parse --show-toplevel 2>/dev/null) || ROOT=$PANE_CWD
 
 svc_name() {
-    local p=$1 pair
+    local p=$1 pair pid n
     for pair in $DEBUG_PORTS; do
         [ "${pair%%:*}" = "$p" ] && { printf '%s' "${pair#*:}"; return; }
     done
+    # not configured: fall back to the jar or main class, which beats "?"
+    pid=$(pid_on_port "$p")
+    if [ -n "$pid" ]; then
+        n=$(pid_cmdline "$pid" 2>/dev/null | grep -oE '[A-Za-z0-9_.-]+\.jar' | head -1)
+        [ -n "$n" ] || n=$(pid_cmdline "$pid" 2>/dev/null | grep -oE 'com\.[A-Za-z0-9.]*\.[A-Z][A-Za-z0-9]*' | head -1)
+        [ -n "$n" ] && { printf '%s' "${n%.jar}"; return; }
+    fi
     printf '?'
 }
-known_port() {
-    local p=$1 pair
-    [ -z "$DEBUG_PORTS" ] && return 0          # no map configured: accept any
-    for pair in $DEBUG_PORTS; do [ "${pair%%:*}" = "$p" ] && return 0; done
-    return 1
+known_port() {   # is $1 the JDWP port of a JVM, not just some port it owns?
+    local pid
+    pid=$(pid_on_port "$1") || return 1
+    [ -n "$pid" ] || return 1
+    # the jdwp agent names its own port; a JVM's HTTP port is on the same
+    # process and must not be offered as a debug target
+    pid_cmdline "$pid" 2>/dev/null \
+      | grep -oE 'agentlib:jdwp=[^ ]*address=[^ ,]*' \
+      | grep -qE "[:=]$1(\$|,)"
 }
 
 abs() { case $1 in /*) printf '%s' "$1" ;; *) printf '%s/%s' "$ROOT" "$1" ;; esac; }
@@ -540,13 +553,25 @@ live_ports() {
     listening_ports \
     | while read -r p; do known_port "$p" && [ "$p" -ge 1024 ] && printf '%s\n' "$p"; done
 }
-jvm_tree() {                       # which checkout the JVM on $1 was started from
-    local pid src
+jvm_tree() {   # the git worktree the JVM on $1 is running out of, or ""
+    local pid dir root c
     pid=$(pid_on_port "$1")
-    [ -n "$pid" ] || { printf '?'; return; }
-    src=$(pid_cmdline "$pid" | grep -oE "$HOME/[^ ]*/" | head -1)
-    src=${src%/}; src=${src##*/}
-    printf '%s' "${src:-?}"
+    [ -n "$pid" ] || return 0
+
+    # the process's own cwd is the reliable answer; fall back to the first real
+    # path on its command line. Never guess from path segments -- a deep path
+    # like .../ultron/core/nb/dist/conf/ ends in "conf", not the repo name.
+    dir=$(proc_cwd "$pid")
+    if [ ! -d "${dir:-}" ]; then
+        dir=""
+        for c in $(pid_cmdline "$pid" | tr ' ' '\n' | grep "^/" | head -20); do
+            if [ -d "$c" ]; then dir=$c; break
+            elif [ -f "$c" ]; then dir=$(dirname "$c"); break; fi
+        done
+    fi
+    [ -d "${dir:-}" ] || return 0
+    root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || return 0
+    printf '%s' "$root"
 }
 sourcepath() { "$FD" --type d --max-depth 4 '^(src|java)$' "$ROOT" 2>/dev/null | tr '\n' ':' | sed 's/:$//'; }
 
@@ -556,9 +581,12 @@ cmd_debug() {
     if [ -z "$port" ]; then
         need fzf
         line=$(live_ports | while read -r p; do
-                   local t=$(jvm_tree "$p") mark=""
-                   [ "$t" != "?" ] && [ "$t" != "$(basename "$ROOT")" ] && mark="  <-- NOT this pane's tree"
-                   printf '%s\t%s\t%s%s\n' "$p" "$(svc_name "$p")" "$t" "$mark"
+                   local t=$(jvm_tree "$p") mark="" show="?"
+                   if [ -n "$t" ]; then
+                       show=$(basename "$t")
+                       [ "$t" != "$ROOT" ] && mark="  <-- built from a different worktree"
+                   fi
+                   printf '%s\t%s\t%s%s\n' "$p" "$(svc_name "$p")" "$show" "$mark"
                done | "$FZF" --delimiter='\t' --with-nth=1,2,3 --layout=reverse \
                              --prompt="attach jdb> " --header="live JDWP ports") || exit 0
         port=${line%%$'\t'*}

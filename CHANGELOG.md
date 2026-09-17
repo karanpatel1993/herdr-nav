@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.1
+
+**The debugger list only shows real debug ports.** It used to offer every
+listening port — Redis, Mongo, IntelliJ — and `jdb` simply hangs against those.
+It now checks that the port is the one a JVM's `jdwp` agent is listening on, so
+an app's HTTP port on the same process is no longer offered either.
+
+**The worktree warning is accurate.** It derived the tree from the last
+directory of whatever path it found, so a service under
+`.../ultron/core/nb/dist/conf/` was reported as "conf" and flagged as a
+mismatch every time. It now resolves the process's real git worktree root.
+
+Unconfigured ports show the jar or main class instead of "?".
+
 ## 0.2.0
 
 **Search is syntax-aware.** Java `callers`, `usages` and `def` run through
