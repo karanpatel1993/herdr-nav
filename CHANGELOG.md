@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1
+
+`herdr-nav keys` reported its own bindings as collisions and printed the
+fallback keys, or `NO FREE KEY`, for everything it had just written. It counted
+the block between its own markers as taken; `setup` had always stripped that
+block before generating, so only the table was wrong, but it contradicted the
+bindings actually in the config.
+
+The `setup` summary also showed `herdr-nav.file` where it means `file`, since a
+plugin_action command has no space to split on.
+
 ## 0.3.0
 
 Installable as a herdr plugin: `herdr plugin install karanpatel1993/herdr-nav`.

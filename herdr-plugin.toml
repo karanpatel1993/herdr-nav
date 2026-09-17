@@ -8,7 +8,7 @@
 
 id = "herdr-nav"
 name = "herdr-nav"
-version = "0.3.0"
+version = "0.3.1"
 min_herdr_version = "0.9.0"
 description = "Find files, search code and debug Java inside herdr"
 platforms = ["linux", "macos"]

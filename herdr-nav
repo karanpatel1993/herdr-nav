@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.3.0
+VERSION=0.3.1
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -1103,7 +1103,9 @@ Run 'herdr config check' to see why."
     printf 'Added %s bindings to %s\n\n' "$(grep -c '^key = ' "$gen")" "$cfg"
     # read back what was actually written; re-running cmd_keys here would see
     # the new block as "taken" and print a different, wrong set of keys
-    awk -F'"' '/^key = /{k=$2} /^command = /{n=split($2,c," "); a=c[n]}
+    awk -F'"' -v id="$PLUGIN_ID." '
+               /^key = /{k=$2}
+               /^command = /{n=split($2,c," "); a=c[n]; sub("^" id, "", a)}
                /^description = /{printf "  %-12s %-20s  %s\n", a, k, $2}' "$gen"
     printf '\nBackup: %s\n' "$backup"
     if [ -n "$HERDR" ] && "$HERDR" server reload-config >/dev/null 2>&1; then
@@ -1163,7 +1165,14 @@ prefix+shift+d prefix+shift+t prefix+shift+x prefix+shift+p prefix+shift+tab ctr
 
 taken_keys() {
     local cfg=${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}
-    [ -r "$cfg" ] && grep -oE '^[[:space:]]*key[[:space:]]*=[[:space:]]*"[^"]+"' "$cfg" \
+    # Skip our own fenced block. Those keys are not collisions -- they are what
+    # we wrote last time, and counting them makes every re-read of the config
+    # believe its own keys are taken and report the fallbacks instead.
+    [ -r "$cfg" ] && awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+            $0 == b { skip = 1; next }
+            $0 == e { skip = 0; next }
+            !skip' "$cfg" \
+        | grep -oE '^[[:space:]]*key[[:space:]]*=[[:space:]]*"[^"]+"' \
         | sed -E 's/.*"([^"]+)".*/\1/'
     printf '%s\n' $HERDR_DEFAULTS
 }
