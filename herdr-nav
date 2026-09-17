@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.2.2
+VERSION=0.2.3
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -778,9 +778,13 @@ DEBUGGING
     clear           list breakpoints;  clear <class>:<line> removes one
     quit            detach
 
-  Put this in ~/.jdbrc to print variables automatically on every stop:
-    monitor where
+  Put this in ~/.jdbrc to print variables and surrounding source on every stop:
     monitor locals
+    monitor list
+
+  Do NOT add `monitor where` on a servlet app -- a Jetty/Struts stack is 110
+  frames of framework and about five of yours. Type `where` when you want it,
+  and `up` / `down` to move between frames.
 
   The service list warns when a service is running code built from a different
   worktree than your pane — line numbers would otherwise point at the wrong lines.

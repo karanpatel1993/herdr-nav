@@ -163,13 +163,16 @@ herdr.
 | `prefix+⇧A` | attach to every running service, one pane each |
 | `prefix+⇧B` | pick a file and set breakpoints in it |
 
-To print the variables automatically every time a breakpoint hits, add this to
-`~/.jdbrc`:
+To print the variables and the surrounding source every time a breakpoint hits,
+add this to `~/.jdbrc`:
 
 ```
-monitor where
 monitor locals
+monitor list
 ```
+
+Leave `monitor where` out on a servlet app — a Jetty stack is 110 frames of
+framework and a handful of yours. Type `where` when you actually want it.
 
 If a service is running code built from a different worktree than your pane, the
 service list says so — otherwise your line numbers point at the wrong lines.

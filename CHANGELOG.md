@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3
+
+The suggested `~/.jdbrc` no longer includes `monitor where`. On a servlet app
+that prints 110 frames of Jetty and Struts on every breakpoint. It now suggests
+`monitor locals` + `monitor list`, which shows the variables and the surrounding
+source with the current line marked.
+
 ## 0.2.2
 
 **Attaching a debugger works.** Picking a service from the list closed the pane
