@@ -4,8 +4,13 @@
 
 Installable as a herdr plugin: `herdr plugin install karanpatel1993/herdr-nav`.
 The manifest declares the nine pickers as pane entrypoints, so herdr owns the
-popup geometry, and a build step brings the dependencies and links the script
-onto `PATH` so every subcommand still works by name.
+popup geometry. A build step installs the dependencies, and a startup hook puts
+the script on `PATH` so every subcommand still works by name -- the link is made
+at runtime because herdr builds in a temp directory and moves the checkout
+afterwards, so anything linked during the build would dangle.
+
+After installing, `herdr plugin action invoke herdr-nav.setup` writes the
+keybindings and makes that link, without waiting for a server restart.
 
 Keys and commands are identical either way. Two differ, because under a plugin
 the directory belongs to herdr: `update` points at `herdr plugin install`

@@ -42,9 +42,15 @@ the files:
 
 ```sh
 herdr plugin install karanpatel1993/herdr-nav
+herdr plugin action invoke herdr-nav.setup
 ```
 
-Pick one. Running both leaves two copies competing for the same keys.
+The second line adds the keybindings and puts `herdr-nav` on your `PATH`; from
+then on every command below works the same in both modes, except that `update`
+and `uninstall` hand back to `herdr plugin install` / `herdr plugin uninstall`.
+
+Pick one install method. Running both leaves two copies competing for the same
+keys.
 
 Then:
 
