@@ -881,7 +881,10 @@ cmd_update() {
     local url=https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav
     local tmp before after
     before=$(VERSION_ONLY=1; printf '%s' "$VERSION")
-    tmp=$(mktemp); trap "rm -f '$tmp'" EXIT
+    # Next to the target, so the mv below is a rename rather than a copy: a
+    # cross-filesystem mv rewrites in place, which is exactly what must not happen.
+    tmp=$(mktemp "$(dirname "$SELF")/.herdr-nav.XXXXXX") || die "cannot write next to $SELF"
+    trap "rm -f '$tmp'" EXIT
     printf 'Fetching the latest herdr-nav...\n'
     curl -fsSL "$url" -o "$tmp" || die "download failed"
     head -1 "$tmp" | grep -q '^#!' || die "download does not look like a script"
@@ -894,7 +897,12 @@ cmd_update() {
         printf 'Already up to date (%s).\n' "$before"
         return 0
     fi
-    cat "$tmp" > "$SELF" || die "could not write $SELF"
+    # rename, never `cat >`: bash reads a script incrementally as it runs, so
+    # rewriting these bytes in place makes the *currently executing* copy carry
+    # on at its old offset into new content and die on garbage. A rename leaves
+    # this process reading the original inode untouched.
+    mv "$tmp" "$SELF" || die "could not replace $SELF"
+    trap - EXIT
     printf 'Updated %s -> %s at %s\n' "$before" "$after" "$SELF"
     printf 'Keybindings are unchanged; no need to re-run setup.\n'
 }
