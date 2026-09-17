@@ -878,14 +878,15 @@ cmd_update() {
     printf 'Fetching the latest herdr-nav...\n'
     curl -fsSL "$url" -o "$tmp" || die "download failed"
     head -1 "$tmp" | grep -q '^#!' || die "download does not look like a script"
-    after=$(sh "$tmp" version 2>/dev/null | awk '{print $2}')
+    # run it via its own shebang, not `sh` -- this is a bash script
+    chmod +x "$tmp"
+    after=$("$tmp" version 2>/dev/null | awk '{print $2}')
     [ -n "$after" ] || die "downloaded script does not run"
 
     if cmp -s "$tmp" "$SELF"; then
         printf 'Already up to date (%s).\n' "$before"
         return 0
     fi
-    chmod +x "$tmp"
     cat "$tmp" > "$SELF" || die "could not write $SELF"
     printf 'Updated %s -> %s at %s\n' "$before" "$after" "$SELF"
     printf 'Keybindings are unchanged; no need to re-run setup.\n'
