@@ -486,6 +486,7 @@ cmd_lines() {
         | "$FZF" --ansi --prompt="$(basename "$file") line> " --layout=reverse --no-sort --multi \
                  --header="$(basename \"$file\")   Tab: mark   Enter: breakpoint   ^R: callers/usages   ^]: definition   ^P: path   Esc: back" \
                  --expect=ctrl-v,ctrl-p,alt-u,ctrl-r,ctrl-] --delimiter=' +' --nth='3..' \
+                 --bind "start:pos($start)" \
                  --preview "$BAT --color=always --style=numbers --highlight-line {1} '$file'" \
                  --preview-window "right,60%,border-left,+{1}+3/3,~0" \
                  --bind "$PREVIEW_CYCLE" --bind 'alt-x:toggle-preview') || return 0
