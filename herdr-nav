@@ -7,6 +7,7 @@
 #   herdr-nav menu        # one key, everything else is in here
 #   herdr-nav setup       # write the herdr keybindings
 #   herdr-nav setkey <action> <key>   # change one, then re-apply
+#   herdr-nav update                  # fetch the latest version in place
 #   herdr-nav uninstall [--yes]       # remove bindings, config, state, script
 #   herdr-nav install | doctor | install-deps | keys | version
 #
@@ -751,6 +752,7 @@ COMMANDS
   herdr-nav setkey <action> <key> change one, then re-apply
   herdr-nav doctor                what is installed, and which search engine
   herdr-nav install-deps          fetch fzf/fd/bat/ripgrep/ast-grep
+  herdr-nav update                fetch the latest version in place
   herdr-nav uninstall             remove bindings, config, state and the script
 
 LIMITS
@@ -863,6 +865,30 @@ cmd_setkey() {
 
     printf '%s is now %s\n\n' "$action" "$key"
     HERDR_NAV_KEYS="$rest" cmd_setup
+}
+
+# --------------------------------------------------------------- update ----
+# Replaces this script in place with the latest published version. Keybindings
+# point at the path, not the contents, so `setup` does not need re-running.
+cmd_update() {
+    local url=https://raw.githubusercontent.com/karanpatel1993/herdr-nav/main/herdr-nav
+    local tmp before after
+    before=$(VERSION_ONLY=1; printf '%s' "$VERSION")
+    tmp=$(mktemp); trap "rm -f '$tmp'" EXIT
+    printf 'Fetching the latest herdr-nav...\n'
+    curl -fsSL "$url" -o "$tmp" || die "download failed"
+    head -1 "$tmp" | grep -q '^#!' || die "download does not look like a script"
+    after=$(sh "$tmp" version 2>/dev/null | awk '{print $2}')
+    [ -n "$after" ] || die "downloaded script does not run"
+
+    if cmp -s "$tmp" "$SELF"; then
+        printf 'Already up to date (%s).\n' "$before"
+        return 0
+    fi
+    chmod +x "$tmp"
+    cat "$tmp" > "$SELF" || die "could not write $SELF"
+    printf 'Updated %s -> %s at %s\n' "$before" "$after" "$SELF"
+    printf 'Keybindings are unchanged; no need to re-run setup.\n'
 }
 
 # ------------------------------------------------------------ uninstall ----
@@ -1094,6 +1120,7 @@ case ${1:-} in
     install-deps)            cmd_install_deps ;;
     keys)                    cmd_keys "${2:-}" ;;
     setup)                   cmd_setup ;;
+    update)                  cmd_update ;;
     uninstall)               cmd_uninstall "${2:-}" ;;
     setkey)                  cmd_setkey "${2:-}" "${3:-}" ;;
     version|--version|-v)    printf 'herdr-nav %s\n' "$VERSION" ;;

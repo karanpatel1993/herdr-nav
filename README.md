@@ -63,6 +63,15 @@ want to change.
 
 `herdr-nav doctor` verifies everything at any point.
 
+### Update
+
+```sh
+herdr-nav update
+```
+
+Replaces the script in place. Keybindings point at the path, not the contents,
+so there is no need to re-run `setup`.
+
 ### Uninstall
 
 ```sh
