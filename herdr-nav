@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.3.2
+VERSION=0.3.3
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -628,20 +628,51 @@ jvm_tree() {   # the git worktree the JVM on $1 is running out of, or ""
 }
 sourcepath() { "$FD" --type d --max-depth 4 '^(src|java)$' "$ROOT" 2>/dev/null | tr '\n' ':' | sed 's/:$//'; }
 
+# Debug ports a running JVM opened but is no longer accepting on. JDWP takes one
+# debugger per JVM: once jdb attaches, the port stops listening and drops out of
+# live_ports, which is correct but leaves an empty picker that reads as a fault.
+attached_ports() {
+    local pid p
+    for pid in $(pgrep -f 'agentlib:jdwp' 2>/dev/null); do
+        p=$(pid_cmdline "$pid" 2>/dev/null \
+            | grep -oE 'agentlib:jdwp=[^ ]*address=[^ ,]*' \
+            | sed -nE 's/.*[:=]([0-9]+)$/\1/p')
+        [ -n "$p" ] || continue
+        listening_ports | grep -qx "$p" || printf '%s\n' "$p"
+    done
+    return 0
+}
+
 cmd_debug() {
     need jdb; need_platform
-    local port=$1 line sp
+    local port=$1 line sp rows busy
     if [ -z "$port" ]; then
         need fzf
-        line=$(live_ports | while read -r p; do
+        rows=$(live_ports | while read -r p; do
                    local t=$(jvm_tree "$p") mark="" show="?"
                    if [ -n "$t" ]; then
                        show=$(basename "$t")
                        [ "$t" != "$ROOT" ] && mark="  <-- built from a different worktree"
                    fi
                    printf '%s\t%s\t%s%s\n' "$p" "$(svc_name "$p")" "$show" "$mark"
-               done | "$FZF" --delimiter='\t' --with-nth=1,2,3 --layout=reverse \
-                             --prompt="attach jdb> " --header="live JDWP ports") || exit 0
+               done)
+        if [ -z "$rows" ]; then
+            busy=$(attached_ports | sort -u | while read -r p; do
+                       printf '%s (%s) ' "$p" "$(svc_name "$p")"; done)
+            if [ -n "$busy" ]; then
+                pause "Nothing free to attach to.
+Already being debugged: $busy
+jdb allows one debugger per JVM. Detach the existing session first -- type
+'exit' in its pane -- or use that pane instead of opening a second one."
+            else
+                pause "No service is running with a debug port open.
+Start one in debug mode, then try again."
+            fi
+            exit 0
+        fi
+        line=$(printf '%s\n' "$rows" \
+               | "$FZF" --delimiter='\t' --with-nth=1,2,3 --layout=reverse \
+                        --prompt="attach jdb> " --header="live JDWP ports") || exit 0
         port=${line%%$'\t'*}
     fi
     [ -n "$port" ] || exit 0

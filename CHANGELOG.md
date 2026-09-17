@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3
+
+The debugger picker said "live JDWP ports" over an empty list when every debug
+port already had a debugger on it. JDWP allows one debugger per JVM, so an
+attached port stops listening and correctly leaves the list -- but an empty
+picker reads as a fault. It now names the ports that are busy and says to detach
+the existing session, and distinguishes that from no service running in debug
+mode at all.
+
 ## 0.3.2
 
 As a plugin, every picker searched herdr-nav's own checkout instead of your
