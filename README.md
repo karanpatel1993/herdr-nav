@@ -140,6 +140,8 @@ Once a file is open:
 
 | | |
 |---|---|
+| *type* | filters the lines — the in-file search |
+| `Ctrl+U` | clear the filter, back to the whole file |
 | `Ctrl+R` | callers or usages of an identifier on this line |
 | `Ctrl+]` | definition of an identifier on this line |
 | `Tab` | mark a line — mark several, then `Enter` sets them all |

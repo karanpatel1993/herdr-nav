@@ -19,7 +19,7 @@
 # an absolute path to this script. `herdr config check` cannot catch that: a
 # bare command name validates fine, then fails silently at keypress time.
 set -uo pipefail
-VERSION=0.2.4
+VERSION=0.2.5
 
 # ---------------------------------------------------------------- config ----
 CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/herdr-nav
@@ -502,7 +502,7 @@ cmd_lines() {
     # back the plain text, so the line number still parses as field 1.
     out=$("$BAT" --color=always --style=numbers --paging=never "$file" 2>/dev/null \
         | "$FZF" --ansi --prompt="$(basename "$file") line> " --layout=reverse --no-sort --multi \
-                 --header="$(basename \"$file\")   Tab: mark   Enter: breakpoint   ^R: callers/usages   ^]: definition   Esc: back   ^Q: quit" \
+                 --header="$(basename \"$file\")   type to search   Tab: mark   Enter: breakpoint   ^R: callers/usages   ^]: definition   ^U: clear   Esc: back" \
                  --expect=ctrl-v,ctrl-p,alt-u,ctrl-r,ctrl-],ctrl-q --delimiter=' +' --nth='3..' \
                  --bind "load:pos($start)" \
                  --preview "$BAT --color=always --style=numbers --highlight-line {1} '$file'" \
@@ -756,6 +756,8 @@ IN AN OPEN FILE
   Ctrl+]          where that identifier is defined
   Tab             mark a line; mark several, then Enter sets them all
   Enter           set a breakpoint on the marked lines
+  type            filters the file's lines -- this is your in-file search
+  Ctrl+U          clear the filter, back to the whole file
   Ctrl+P          send path:line to your pane
   Esc             back one step
   Ctrl+Q          close the popup entirely

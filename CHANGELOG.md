@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.5
+
+An open file has always been searchable by typing — it is an fzf picker — but
+nothing said so. The header now reads "type to search", and `Ctrl+U` clears the
+filter to get the whole file back.
+
 ## 0.2.4
 
 Documented the jdb commands you need once attached — `cont`, `next`, `step`,
